@@ -22,7 +22,7 @@ to run the project:
 
 enjoy
 
-tou might need to install packege:
+you might need to install packege:
 
 - pip install -r requirements.txt
 
