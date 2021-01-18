@@ -20,9 +20,11 @@ to run the project:
 - exacute server.py
 - open in browser  "http://localhost:80/"
 
-enjoy
-
 you might need to install packege:
 
 - pip install -r requirements.txt
+
+
+enjoy
+
 
