@@ -93,15 +93,15 @@ $(document).ready(
     //build the output table
     function build_result_table(shifts) {
         //check if there is a solution
+        let shifts_dic = {"0":"M", "1":"N", "2":"E"}
+        let days_dic = {"1": "ST", "2":"MT", "3":"TT", "4":"WT", "5":"ThT", "6":"FT", "7":"SaT"}
+        Object.keys(shifts_dic).forEach(function (shift_key_val) {
+            Object.keys(days_dic).forEach(function (day_key) {
+                $("#" + shifts_dic[shift_key_val] + days_dic[day_key]).empty() // clear the tables
+            })
+        })
         if (shifts[0] !== "there is no solution!") {
             let names = get_nurse_names() // get the nurses names
-            let shifts_dic = {"0":"M", "1":"N", "2":"E"}
-            let days_dic = {"1": "ST", "2":"MT", "3":"TT", "4":"WT", "5":"ThT", "6":"FT", "7":"SaT"}
-            Object.keys(shifts_dic).forEach(function (shift_key_val) {
-                Object.keys(days_dic).forEach(function (day_key) {
-                    $("#" + shifts_dic[shift_key_val] + days_dic[day_key]).empty() // clear the tables
-                })
-            })
             let day = ""
             shifts.forEach(function (nurse_shift, index) {
                 // nurse shift is a string
