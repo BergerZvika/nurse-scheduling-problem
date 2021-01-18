@@ -1,5 +1,8 @@
 # nurse-scheduling-problem
 
+Zvi Berger 206126575
+Assaf Yossef 322380387
+
 ## Optimization project
 solve the nurse-scheduling-problem with:
 1) Maximum Shift – Integer Programing
