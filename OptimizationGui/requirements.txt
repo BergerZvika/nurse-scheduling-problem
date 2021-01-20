@@ -1,4 +1,5 @@
 deap
 flask
 matplotlib
+Seaborn
 ortools
