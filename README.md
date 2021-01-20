@@ -17,6 +17,7 @@ solve the nurse-scheduling-problem with:
 
 ## run
 to run the project:
+- insert to 
 - exacute server.py
 - open in browser  "http://localhost:80/"
 
