@@ -1,0 +1,2035 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NSP — 3D Visualization Lab</title>
+<style>
+  :root{
+    --bg-0:#05060c;
+    --bg-1:#0a0d1a;
+    --ink:#e7ecff;
+    --ink-dim:#8a93b2;
+    --line:rgba(255,255,255,.08);
+    --panel:rgba(16,20,38,.55);
+    --panel-2:rgba(16,20,38,.35);
+    --cyan:#5cf6ff;
+    --violet:#b58bff;
+    --magenta:#ff6cf0;
+    --amber:#ffd166;
+    --green:#7dffb4;
+    --red:#ff6b7a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg-0);color:var(--ink);
+    font:13px/1.45 "Inter",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    letter-spacing:.01em;-webkit-font-smoothing:antialiased}
+  canvas{display:block}
+  #bg{position:fixed;inset:0;
+    background:
+      radial-gradient(1200px 700px at 80% -10%, rgba(181,139,255,.18), transparent 60%),
+      radial-gradient(900px 700px at -10% 110%, rgba(92,246,255,.12), transparent 55%),
+      linear-gradient(180deg,#05060c 0%, #090b18 60%, #0b0f22 100%);
+    z-index:-1}
+  /* 3D canvas lives inside the viz popup — fills its container */
+  #scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+  /* Main page layout (always visible, even when viz popup is open) */
+  .main-page{position:fixed;inset:0;display:flex;flex-direction:column;padding:18px;gap:14px;z-index:5}
+  .main-page > header{flex:none}
+  .main-page > main{flex:1;min-height:0;display:flex}
+  .main-page > footer{flex:none}
+  /* ——— HUD frame ——— */
+  .hud{position:fixed;display:flex;flex-direction:column;gap:10px;pointer-events:none;z-index:10}
+  .hud > *{pointer-events:auto}
+  .glass{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line);border-radius:14px;
+    backdrop-filter:blur(18px) saturate(140%);
+    -webkit-backdrop-filter:blur(18px) saturate(140%);
+    box-shadow:0 20px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .title-bar{top:18px;left:18px;right:18px;flex-direction:row;align-items:center;justify-content:space-between}
+  .brand{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px}
+  .logo{width:26px;height:26px;border-radius:8px;
+    background:conic-gradient(from 210deg,#5cf6ff,#b58bff,#ff6cf0,#5cf6ff);
+    box-shadow:0 0 22px rgba(181,139,255,.55), inset 0 0 10px rgba(255,255,255,.25);
+    position:relative}
+  .logo::after{content:"";position:absolute;inset:5px;border-radius:5px;
+    background:radial-gradient(circle at 30% 30%,#fff 0 15%,transparent 16%),#0a0d1a}
+  .brand h1{font:600 14px/1 "Inter",sans-serif;margin:0;letter-spacing:.12em;text-transform:uppercase}
+  .brand small{color:var(--ink-dim);letter-spacing:.22em;text-transform:uppercase;font-size:10px}
+  .chip-row{display:flex;gap:8px;padding:8px 10px;border-radius:12px;align-items:center}
+  .chip{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;
+    background:rgba(255,255,255,.04);border:1px solid var(--line);font-size:11px;color:var(--ink-dim)}
+  .chip b{color:var(--ink);font-weight:600}
+  .chip .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  .chip.live .dot{background:var(--green);box-shadow:0 0 10px var(--green);animation:pulse 1.2s ease-in-out infinite}
+  .chip.idle .dot{background:var(--ink-dim);box-shadow:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  /* problem board — fills the main content area */
+  .problem-board{flex:1;padding:22px;display:flex;flex-direction:column;gap:16px;overflow:auto;min-height:0}
+  /* viz side panel — inside the popup, flex child of .viz-body */
+  .viz-side{width:340px;padding:18px;display:flex;flex-direction:column;gap:14px;overflow:auto;
+    border-left:1px solid var(--line);background:linear-gradient(180deg,rgba(16,20,38,.35),rgba(16,20,38,.55))}
+  /* params row */
+  .params-grid{display:grid;grid-template-columns:repeat(4, 1fr);gap:8px}
+  .params-grid > div{padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--line)}
+  .params-grid .slider-row{margin-bottom:2px}
+  .params-grid label{font-size:10px}
+  .params-grid output{font-size:12px}
+
+  /* 2-column editor grid inside the panel */
+  .editor-grid{display:grid;grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);gap:18px;align-items:start}
+  .editor-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+  .editor-col .section-label{margin:0}
+  @media (max-width: 1100px){
+    .editor-grid{grid-template-columns: 1fr}
+    .panel-left{width:min(92vw, 720px)}
+    .params-grid{grid-template-columns:repeat(2, 1fr)}
+  }
+  .inline-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .inline-head .actions{display:flex;gap:4px}
+  .inline-head .actions button{padding:6px 10px;font-size:10px;letter-spacing:.14em;flex:none}
+  .small-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:rgba(125,255,180,.12);border:1px solid rgba(125,255,180,.32);font-size:10px;color:var(--green)}
+  .small-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+  .small-chip.warn{background:rgba(255,108,240,.12);border-color:rgba(255,108,240,.32);color:var(--magenta)}
+  .small-chip.warn .dot{background:var(--magenta);box-shadow:0 0 8px var(--magenta)}
+
+  /* schedule overlay in cells */
+  .req-cell.assigned{background:linear-gradient(135deg,rgba(125,255,180,.22),rgba(92,246,255,.14));color:var(--green);border-radius:0}
+  .req-cell.assigned .badge{color:var(--green);opacity:1;font-weight:700}
+  .req-cell.assigned::before{content:"";position:absolute;inset:auto 6px 6px auto;width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+  .req-cell.off.assigned{background:linear-gradient(135deg,rgba(255,108,240,.3),rgba(255,107,122,.25));color:var(--red)}
+  .req-cell.off.assigned .badge{color:var(--red)}
+  .req-cell.off.assigned::before{background:var(--red);box-shadow:0 0 8px var(--red)}
+  .req-cell.off.assigned::after{box-shadow:inset 0 0 0 1px rgba(255,107,122,.55) !important}
+
+  /* rename input focus ring */
+  #nurseRenameInput:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(92,246,255,.15)}
+
+  /* shift result table */
+  .shift-result{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.02)}
+  .shift-result .empty{padding:24px 16px;font-size:12px;color:var(--ink-dim);text-align:center}
+  .shift-result table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+  .shift-result th{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);padding:12px 8px;
+    background:rgba(255,255,255,.03);font-weight:600;border-bottom:1px solid var(--line);text-align:center}
+  .shift-result th.day{text-align:left;padding-left:14px;width:66px}
+  .shift-result td{padding:10px 8px;vertical-align:top;border-bottom:1px solid var(--line)}
+  .shift-result tr:last-child td{border-bottom:none}
+  .shift-result td.day{color:var(--ink);font-weight:600;padding:10px 14px;font-size:12.5px;background:rgba(255,255,255,.02);vertical-align:middle}
+  .shift-result .names{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-start}
+  .shift-result .pill{font-size:11px;padding:4px 8px;border-radius:7px;background:linear-gradient(135deg,rgba(92,246,255,.18),rgba(181,139,255,.12));color:var(--cyan);border:1px solid rgba(92,246,255,.25);white-space:nowrap}
+  .shift-result .pill.violation{background:linear-gradient(135deg,rgba(255,108,240,.22),rgba(255,107,122,.18));color:var(--red);border-color:rgba(255,107,122,.35)}
+
+  /* compact shift result (viz side panel) */
+  .viz-shift-result table{font-size:10.5px}
+  .viz-shift-result th{padding:8px 4px;font-size:9.5px;letter-spacing:.14em}
+  .viz-shift-result td{padding:6px 4px}
+  .viz-shift-result td.day{padding:6px 10px;font-size:11px;width:52px}
+  .viz-shift-result .pill{font-size:9.5px;padding:2px 6px;border-radius:5px}
+  .viz-shift-result .names{gap:3px}
+  .section-label{font:600 10px/1 "Inter",sans-serif;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-dim);margin:2px 0 -2px}
+  .viz-side .section-label{font-size:12px;letter-spacing:.22em;margin:4px 0 2px}
+  .viz-side .chart-head .label{font-size:12px}
+
+  /* Algorithm launcher bar */
+  .algo-bar{padding:10px 12px;display:flex;gap:10px;align-items:stretch}
+  .algo-bar .scroller{flex:1;display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 6px;scroll-behavior:smooth}
+  .algo-bar .scroller::-webkit-scrollbar{height:6px}
+  .algo-bar .scroller::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:999px}
+  .algo-card{flex:1 0 170px;min-width:170px;cursor:pointer;position:relative;
+    padding:12px 14px;border-radius:12px;border:1px solid var(--line);
+    background:linear-gradient(160deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
+    transition:.18s ease;display:flex;flex-direction:column;gap:4px;user-select:none}
+  .algo-card:hover{transform:translateY(-2px);border-color:rgba(92,246,255,.35);
+    background:linear-gradient(160deg, rgba(92,246,255,.08), rgba(181,139,255,.05))}
+  .algo-card.active{border-color:transparent;
+    background:linear-gradient(135deg, var(--cyan), var(--violet));
+    color:#07111a;box-shadow:0 14px 40px rgba(92,246,255,.25), 0 14px 40px rgba(181,139,255,.18)}
+  .algo-card.active .name,.algo-card.active .tag,.algo-card.active .idx{color:#07111a}
+  .algo-card .idx{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);display:flex;align-items:center;gap:8px}
+  .algo-card .idx .n{width:18px;height:18px;border-radius:5px;background:rgba(255,255,255,.08);display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--ink)}
+  .algo-card.active .idx .n{background:rgba(7,17,26,.2);color:#07111a}
+  .algo-card .name{font-size:13.5px;font-weight:600;letter-spacing:-.005em}
+  .algo-card .tag{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);opacity:.8}
+  .algo-card.running::after{content:"";position:absolute;inset:-1px;border-radius:13px;pointer-events:none;
+    background:conic-gradient(from 0deg,rgba(92,246,255,.6), rgba(181,139,255,.6), rgba(92,246,255,.6));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;padding:1.5px;
+    animation:spin 4s linear infinite;opacity:.85}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .algo-bar .action-col{display:flex;flex-direction:column;gap:6px;align-items:stretch;justify-content:stretch;min-width:130px}
+  .algo-bar .action-col .mini-btn{padding:8px 10px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;text-align:center;
+    border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.04);color:var(--ink);cursor:pointer;transition:.15s;font-weight:600;flex:1;display:grid;place-items:center}
+  .algo-bar .action-col .mini-btn:hover{background:rgba(255,255,255,.08)}
+  .algo-bar .action-col .mini-btn.stop{background:linear-gradient(135deg, #ff6b7a, #ff6cf0);color:#07111a;border-color:transparent;
+    box-shadow:0 6px 20px rgba(255,107,122,.25)}
+  .algo-bar .action-col .mini-btn.stop[disabled]{opacity:.35;cursor:not-allowed;background:rgba(255,255,255,.04);color:var(--ink-dim);box-shadow:none}
+
+  .slider-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  .slider-row label{font-size:11px;color:var(--ink-dim)}
+  .slider-row output{font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink)}
+  input[type=range]{-webkit-appearance:none;width:100%;background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:999px;
+    background:linear-gradient(90deg,var(--cyan),var(--violet))}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:#fff;margin-top:-6px;box-shadow:0 0 0 3px rgba(181,139,255,.3), 0 4px 10px rgba(0,0,0,.5);cursor:pointer}
+  input[type=range]::-moz-range-track{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--violet))}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:none;box-shadow:0 0 0 3px rgba(181,139,255,.3)}
+
+  .btn-row{display:flex;gap:8px}
+  button{
+    all:unset;cursor:pointer;flex:1;text-align:center;padding:11px 12px;border-radius:10px;font-weight:600;
+    font-size:12px;letter-spacing:.08em;text-transform:uppercase;transition:.18s;
+    border:1px solid var(--line);color:var(--ink);background:rgba(255,255,255,.04)}
+  button:hover{background:rgba(255,255,255,.08);transform:translateY(-1px)}
+  button.primary{background:linear-gradient(135deg,var(--cyan),var(--violet));color:#07111a;border-color:transparent;
+    box-shadow:0 8px 24px rgba(92,246,255,.25), 0 8px 24px rgba(181,139,255,.2)}
+  button.primary:hover{filter:brightness(1.07)}
+  button.ghost{background:transparent}
+  button.danger{color:var(--red)}
+
+  /* right panel stats */
+  .stat{display:flex;justify-content:space-between;align-items:baseline;padding:12px 14px;border-radius:10px;
+    background:rgba(255,255,255,.025);border:1px solid var(--line)}
+  .stat .k{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim)}
+  .stat .v{font:700 22px/1 "Inter",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .stat.hard .v{color:var(--red)}
+  .stat.soft .v{color:var(--amber)}
+  .stat.cost .v{color:var(--cyan)}
+  .stat.best .v{color:var(--green)}
+
+  .legend{display:grid;grid-template-columns:auto 1fr;gap:8px 10px;padding:10px 12px;border-radius:10px;
+    background:rgba(255,255,255,.025);border:1px solid var(--line);font-size:11px;color:var(--ink-dim)}
+  .sw{width:14px;height:14px;border-radius:4px;border:1px solid rgba(255,255,255,.12)}
+
+  /* cost chart inside right panel */
+  .chart-wrap{padding:10px 12px 8px;display:flex;flex-direction:column;gap:4px}
+  .chart-head{display:flex;justify-content:space-between;align-items:center}
+  .chart-head .label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-dim)}
+  .chart-head .meta{display:flex;gap:10px;font-size:10px;color:var(--ink-dim)}
+  .chart-head .meta b{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:600}
+  canvas.chart{width:100%;height:110px;border-radius:8px;background:rgba(0,0,0,.25);border:1px solid var(--line)}
+
+  /* tooltip */
+  .tip{position:fixed;pointer-events:none;padding:8px 10px;border-radius:10px;font-size:11px;
+    background:rgba(10,13,26,.92);border:1px solid var(--line);color:var(--ink);z-index:30;
+    transform:translate(-50%,-120%);white-space:nowrap;opacity:0;transition:opacity .12s ease;
+    box-shadow:0 10px 30px rgba(0,0,0,.6)}
+  .tip b{color:var(--cyan)}
+  .tip.show{opacity:1}
+
+  /* camera mini-controls (inside left panel) */
+  .mini{display:flex;flex-direction:row;gap:6px;justify-content:space-between}
+  .mini button{flex:1;padding:9px 6px;display:grid;place-items:center;font-size:14px;letter-spacing:0;text-transform:none;font-weight:400;background:rgba(255,255,255,.03)}
+  .mini .lbl{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);margin-top:2px}
+
+  /* footer hint — shown inline in the viz modal */
+  .hint{color:var(--ink-dim);font-size:10px;letter-spacing:.14em;text-transform:uppercase;text-align:center;padding:6px}
+  .hint kbd{display:inline-block;padding:2px 6px;border-radius:5px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink);font-family:inherit;font-size:10px;letter-spacing:.12em;margin:0 2px}
+
+  /* Viz overlay — dim backdrop + centered popup window */
+  .viz-overlay{position:fixed;inset:0;display:none;justify-content:center;align-items:center;
+    padding:24px;z-index:65;background:rgba(4,6,14,.55);
+    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+  body.viz-open .viz-overlay{display:flex}
+  .viz-popup{width:min(1400px, 95vw);height:min(900px, 90vh);
+    display:flex;flex-direction:column;border-radius:18px;overflow:hidden;
+    background:linear-gradient(180deg, rgba(16,20,38,.72), rgba(16,20,38,.88));
+    border:1px solid var(--line);
+    box-shadow:0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(92,246,255,.08), inset 0 1px 0 rgba(255,255,255,.04);
+    transform:translateY(10px) scale(.985);transition:transform .28s cubic-bezier(.2,.9,.2,1)}
+  body.viz-open .viz-popup{transform:none}
+  .viz-body{flex:1;min-height:0;display:flex}
+  .viz-canvas-wrap{flex:1;min-width:0;position:relative;overflow:hidden}
+  .viz-footer-hint{position:absolute;left:20px;bottom:16px;z-index:70;pointer-events:none;
+    padding:6px 12px;border-radius:999px;background:rgba(16,20,38,.55);border:1px solid var(--line);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+
+  /* head lives inside the popup as a top bar */
+  .viz-head{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;
+    border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,0));flex:none}
+  .viz-head .title{display:flex;align-items:center;gap:16px}
+  .viz-head .name{font:700 16px/1.1 "Inter",sans-serif;letter-spacing:.14em;text-transform:uppercase}
+  .viz-head .sub{font-size:11.5px;color:var(--ink-dim);letter-spacing:.14em;text-transform:uppercase;margin-top:4px}
+  .viz-head .running-dot{width:11px;height:11px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 1.2s ease-in-out infinite}
+  .viz-head.idle .running-dot{background:var(--ink-dim);box-shadow:none;animation:none}
+  .viz-head .controls{display:flex;gap:8px}
+  .viz-head .controls button{padding:9px 14px;font-size:11px;letter-spacing:.14em;flex:none}
+
+  /* (scene title / axis labels now live inside the 3D scene as sprites) */
+
+  /* ——— Requests editor modal ——— */
+  .modal-back{position:fixed;inset:0;background:rgba(4,6,14,.65);backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);z-index:60;opacity:0;pointer-events:none;transition:opacity .22s ease;display:grid;place-items:center;padding:24px}
+  .modal-back.open{opacity:1;pointer-events:auto}
+  .modal{width:min(920px, 96vw);max-height:90vh;display:flex;flex-direction:column;border-radius:18px;overflow:hidden;
+    transform:translateY(12px) scale(.985);transition:transform .28s cubic-bezier(.2,.9,.2,1)}
+  .modal-back.open .modal{transform:none}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
+  .modal-head h2{margin:0;font-size:14px;letter-spacing:.18em;text-transform:uppercase;font-weight:600}
+  .modal-head p{margin:4px 0 0;color:var(--ink-dim);font-size:11.5px}
+  .modal-close{width:32px;height:32px;display:grid;place-items:center;font-size:16px;padding:0;border-radius:8px;
+    flex:none;letter-spacing:0;text-transform:none;font-weight:400}
+  .modal-body{padding:16px 22px 8px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+  .modal-foot{padding:14px 22px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center}
+  .modal-foot .left{display:flex;gap:8px}
+  .modal-foot .right{display:flex;gap:8px}
+  .modal-foot button{flex:none;padding:10px 16px}
+
+  .nurse-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:4px 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .nurse-tab{padding:6px 12px;border-radius:999px;border:1px solid var(--line);font-size:11px;cursor:pointer;
+    background:rgba(255,255,255,.03);color:var(--ink-dim);display:inline-flex;align-items:center;gap:6px;transition:.15s}
+  .nurse-tab:hover{background:rgba(255,255,255,.07);color:var(--ink)}
+  .nurse-tab.active{background:linear-gradient(135deg,var(--cyan),var(--violet));color:#07111a;border-color:transparent;font-weight:600;
+    box-shadow:0 4px 14px rgba(92,246,255,.25)}
+  .nurse-tab .count{font-size:9.5px;color:inherit;opacity:.75;background:rgba(0,0,0,.15);padding:1px 6px;border-radius:999px}
+  .nurse-tab.active .count{background:rgba(7,17,26,.22)}
+
+  .req-toolbar{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--ink-dim);gap:12px;flex-wrap:wrap}
+  .req-toolbar .legend-inline{display:flex;gap:12px;align-items:center}
+  .req-toolbar .legend-inline span{display:inline-flex;gap:6px;align-items:center}
+  .req-toolbar .sw{width:12px;height:12px;border-radius:4px;border:1px solid rgba(255,255,255,.12)}
+  .req-toolbar button{padding:6px 10px;font-size:10.5px;letter-spacing:.14em;flex:none}
+
+  .req-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;
+    background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .req-grid th, .req-grid td{padding:0;text-align:center;vertical-align:middle}
+  .req-grid thead th{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);
+    padding:14px 10px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--line);font-weight:600}
+  .req-grid tbody th{font-size:12.5px;color:var(--ink);padding:14px 18px;text-align:left;
+    background:rgba(255,255,255,.02);border-right:1px solid var(--line);width:100px;font-weight:600;letter-spacing:.04em}
+  .req-grid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .req-grid td:last-child{border-right:none}
+  .req-grid tr:last-child td, .req-grid tr:last-child th{border-bottom:none}
+  .req-cell{width:100%;height:62px;cursor:pointer;display:grid;place-items:center;transition:.14s;
+    position:relative;overflow:hidden}
+  .req-cell:hover{background:rgba(255,255,255,.04)}
+  .req-cell .badge{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim);opacity:.55;font-weight:600}
+  .req-cell.off{background:linear-gradient(135deg,rgba(255,108,240,.18),rgba(181,139,255,.12));color:var(--magenta)}
+  .req-cell.off .badge{color:var(--magenta);opacity:1;font-weight:600}
+  .req-cell.off::after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 0 1px rgba(255,108,240,.45);pointer-events:none;border-radius:0}
+
+  .panel-note{font-size:11px;color:var(--ink-dim);padding:8px 10px;border-radius:8px;background:rgba(92,246,255,.06);border:1px solid rgba(92,246,255,.18)}
+
+  /* modal tabs */
+  .modal-tabs{display:flex;gap:4px;padding:10px 22px 0;border-bottom:1px solid var(--line)}
+  .modal-tabs .tab{flex:none;padding:10px 18px;border-radius:10px 10px 0 0;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    background:transparent;border:1px solid transparent;border-bottom:none;color:var(--ink-dim);cursor:pointer;font-weight:600;transition:.15s}
+  .modal-tabs .tab:hover{color:var(--ink);background:rgba(255,255,255,.03)}
+  .modal-tabs .tab.active{color:var(--ink);background:rgba(255,255,255,.04);border-color:var(--line);border-bottom-color:transparent;
+    box-shadow:0 2px 0 0 rgba(16,20,38,.55)}
+  .tab-pane{display:none;flex-direction:column;gap:14px}
+  .tab-pane.active{display:flex}
+
+  /* hard constraints editor */
+  .con-grid{display:grid;grid-template-columns:140px repeat(2, 1fr);gap:10px;align-items:center}
+  .con-grid .head{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);padding-bottom:4px;border-bottom:1px solid var(--line)}
+  .con-grid .name{font-size:12px;color:var(--ink);padding:6px 0}
+  .con-input{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+  .con-input label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+  .con-input input{all:unset;width:48px;text-align:center;font-variant-numeric:tabular-nums;color:var(--ink);font-size:13px;
+    padding:6px 4px;border-radius:6px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.08)}
+  .con-input input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(92,246,255,.15)}
+  .con-stepper{display:flex;flex-direction:column;gap:2px}
+  .con-stepper button{all:unset;cursor:pointer;width:18px;height:13px;display:grid;place-items:center;font-size:10px;color:var(--ink-dim);
+    border-radius:4px;background:rgba(255,255,255,.04);padding:0;letter-spacing:0;text-transform:none;font-weight:400}
+  .con-stepper button:hover{color:var(--ink);background:rgba(255,255,255,.08)}
+  .con-row{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--line)}
+  .con-row > .k{font-size:11px;color:var(--ink-dim);min-width:170px}
+  .con-row > .v{display:flex;gap:8px;flex:1}
+  .con-preset{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .con-preset button{padding:8px 12px;font-size:10.5px;letter-spacing:.12em;flex:none}
+
+  /* responsive fallback */
+  @media (max-width: 1100px){
+    .chart-wrap{left:16px;right:16px;bottom:8px;height:110px}
+    .panel-left,.panel-right{width:260px}
+  }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+
+<!-- ============ MAIN PAGE ============ -->
+<div class="main-page">
+  <!-- Top bar -->
+  <header class="glass title-bar" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px 10px 10px">
+    <div class="brand" style="display:flex;align-items:center;gap:12px">
+      <div class="logo"></div>
+      <div>
+        <small>Nurse Scheduling Problem</small>
+        <h1>Problem Lab</h1>
+      </div>
+    </div>
+    <div class="chip-row" style="display:flex;gap:8px;align-items:center">
+      <div class="chip idle" id="chipStatus"><span class="dot"></span><b id="statusText">Idle</b></div>
+      <div class="chip"><span>Algorithm</span><b id="chipAlgo">—</b></div>
+      <div class="chip"><span>Elapsed</span><b id="chipTime">0.00s</b></div>
+    </div>
+  </header>
+
+  <!-- Main: problem board -->
+  <main class="glass problem-board">
+    <div class="section-label">Problem size</div>
+    <div class="params-grid">
+      <div>
+        <div class="slider-row"><label>Nurses</label><output id="oNurses">8</output></div>
+        <input type="range" id="rNurses" min="3" max="14" value="8" step="1" />
+      </div>
+      <div>
+        <div class="slider-row"><label>Days</label><output id="oDays">7</output></div>
+        <input type="range" id="rDays" min="3" max="7" value="7" step="1" />
+      </div>
+      <div>
+        <div class="slider-row"><label>Shifts / day</label><output id="oShifts">3</output></div>
+        <input type="range" id="rShifts" min="2" max="4" value="3" step="1" />
+      </div>
+      <div>
+        <div class="slider-row"><label>Max / week</label><output id="oMax">5</output></div>
+        <input type="range" id="rMax" min="2" max="7" value="5" step="1" />
+      </div>
+    </div>
+
+    <div class="editor-grid">
+      <div class="editor-col">
+        <div class="inline-head">
+          <div class="section-label">Nurse Requests</div>
+          <div class="actions">
+            <button class="ghost" id="inlineReqRandom">Randomize</button>
+            <button class="ghost" id="inlineReqClear">Clear</button>
+          </div>
+        </div>
+        <div class="nurse-tabs" id="inlineNurseTabs"></div>
+        <div class="rename-row" id="renameRow" style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);flex:none">Rename</label>
+          <input type="text" id="nurseRenameInput" placeholder="Nurse 1"
+            style="all:unset;flex:1;font-size:13px;color:var(--ink);padding:8px 12px;border-radius:8px;background:rgba(0,0,0,.25);border:1px solid var(--line)" />
+        </div>
+        <div id="inlineReqGrid"></div>
+        <div id="inlineResultChip" style="display:none"></div>
+      </div>
+
+      <div class="editor-col">
+        <div class="section-label">Schedule · by shift</div>
+        <div id="shiftResultWrap" class="shift-result"></div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="display:flex;gap:8px">
+      <button class="primary" id="btnEdit" style="flex:0 0 auto">Hard Constraints</button>
+      <button id="btnReset" style="flex:0 0 auto">Reset</button>
+    </div>
+  </main>
+
+  <!-- Footer: algorithm launcher -->
+  <footer class="glass algo-bar" id="algoBar">
+    <div class="scroller" id="algoScroller"></div>
+  </footer>
+</div>
+
+<!-- ============ VISUALIZATION POPUP ============ -->
+<div class="viz-overlay" id="vizOverlay">
+  <div class="viz-popup" id="vizPopup">
+    <div class="viz-head idle" id="vizHead">
+      <div class="title">
+        <span class="running-dot"></span>
+        <div>
+          <div class="name" id="vizAlgoName">—</div>
+          <div class="sub" id="vizSub">Initializing…</div>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="btnAuto" class="ghost">Auto-rotate</button>
+        <button id="btnTop" title="Top view" class="ghost">Top</button>
+        <button id="btnIso" title="Isometric" class="ghost">Iso</button>
+        <button id="btnFront" title="Front view" class="ghost">Front</button>
+        <button id="btnStop" class="primary" disabled>■ Stop</button>
+        <button id="btnVizClose" class="ghost">× Close</button>
+      </div>
+    </div>
+
+    <div class="viz-body">
+      <div class="viz-canvas-wrap" id="vizCanvasWrap">
+        <canvas id="scene"></canvas>
+        <div class="viz-footer-hint glass hint">Drag to orbit · Scroll to zoom · <kbd>Esc</kbd> close</div>
+      </div>
+
+      <div class="viz-side">
+    <div class="section-label">Live telemetry</div>
+    <div class="stat cost"><span class="k">Current cost</span><span class="v" id="sCost">—</span></div>
+    <div class="stat best"><span class="k">Best cost</span><span class="v" id="sBest">—</span></div>
+    <div class="stat"><span class="k">Iteration</span><span class="v" id="sIter">0</span></div>
+    <div class="stat hard"><span class="k">Hard violations</span><span class="v" id="sHard">0</span></div>
+    <div class="stat soft"><span class="k">Preference breaks</span><span class="v" id="sSoft">0</span></div>
+
+    <div class="chart-wrap">
+      <div class="chart-head">
+        <span class="label">Cost trajectory</span>
+        <div class="meta"><span>min <b id="mMin">—</b></span><span>max <b id="mMax">—</b></span></div>
+      </div>
+      <canvas class="chart" id="chart"></canvas>
+    </div>
+
+    <div class="section-label" style="margin-top:4px">Run speed</div>
+    <input type="range" id="rSpeed" min="0.25" max="4" value="1" step="0.25" />
+    <div style="text-align:right;font-size:11px;color:var(--ink-dim);margin-top:-6px">
+      <output id="oSpeed">1.0×</output>
+    </div>
+
+    <div class="section-label" style="margin-top:4px">Schedule · by shift</div>
+    <div id="vizShiftResultWrap" class="shift-result viz-shift-result"></div>
+
+    <div class="section-label" style="margin-top:4px">Legend</div>
+    <div class="legend">
+      <div class="sw" style="background:linear-gradient(135deg,#5cf6ff,#b58bff);box-shadow:0 0 8px rgba(92,246,255,.5)"></div><div>Iteration sphere</div>
+      <div class="sw" style="background:linear-gradient(135deg,#ffd166,#ff6cf0)"></div><div>Best iteration so far</div>
+      <div class="sw" style="background:rgba(255,108,240,.35)"></div><div>Worse-cost region</div>
+    </div>
+      </div><!-- /.viz-side -->
+    </div><!-- /.viz-body -->
+  </div><!-- /.viz-popup -->
+</div><!-- /.viz-overlay -->
+
+<div class="tip" id="tip"></div>
+
+<!-- Hard constraints modal -->
+<div class="modal-back" id="modalBack">
+  <div class="modal glass">
+    <div class="modal-head">
+      <div>
+        <h2>Hard Constraints</h2>
+        <p>The rules the algorithm must satisfy. Violating any of these adds a heavy penalty to the total cost.</p>
+      </div>
+      <button class="modal-close" id="modalClose" title="Close">×</button>
+    </div>
+    <div class="modal-body" style="padding-top:18px">
+        <div class="con-row">
+          <div class="k">Max shifts per nurse / week</div>
+          <div class="v" id="conMaxWeek"></div>
+        </div>
+        <div class="con-row">
+          <div class="k">Hard-constraint penalty</div>
+          <div class="v" id="conPenalty"></div>
+        </div>
+        <div class="con-row" style="flex-direction:column;align-items:stretch;gap:8px">
+          <div class="k" style="min-width:0">Per-shift staffing (min / max nurses on duty)</div>
+          <div class="v" id="conShifts" style="flex-direction:column;gap:6px;align-items:stretch"></div>
+        </div>
+        <div>
+          <div class="section-label" style="margin-bottom:6px">Quick presets</div>
+          <div class="con-preset">
+            <button class="ghost" data-preset="quiet">Quiet ward</button>
+            <button class="ghost" data-preset="balanced">Balanced</button>
+            <button class="ghost" data-preset="busy">Busy hospital</button>
+            <button class="ghost" data-preset="strict">Strict (penalty ×3)</button>
+          </div>
+        </div>
+        <div class="panel-note">Hard constraints are violated with a heavy penalty — algorithms will first try to eliminate all violations here before minimising preference breaks.</div>
+    </div>
+    <div class="modal-foot">
+      <div class="left">
+        <span style="color:var(--ink-dim);font-size:11px">Changes apply immediately and reset the current run.</span>
+      </div>
+      <div class="right">
+        <button class="ghost" id="modalCancel">Close</button>
+        <button class="primary" id="modalRun">Close & Run</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Three.js via importmap -->
+<script type="importmap">
+{
+  "imports":{
+    "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ========================================================================
+   Nurse Scheduling Problem — JS port (mirrors OptimizationGui/nurse_class.py)
+   ======================================================================== */
+const SHIFT_NAMES = ['Morning','Evening','Night','Overnight'];
+
+class NSP {
+  constructor(opts){
+    this.nurses = opts.nurses;
+    this.days = opts.days;
+    this.shiftsPerDay = opts.shiftsPerDay;
+    this.maxPerWeek = opts.maxPerWeek;                // scalar, same for all nurses
+    this.shiftMin = opts.shiftMin ?? Array(opts.shiftsPerDay).fill(2);
+    this.shiftMax = opts.shiftMax ?? Array(opts.shiftsPerDay).fill(6);
+    this.hardPenalty = opts.hardPenalty ?? 10;
+    // preferences[n][d][s] == 1 means "nurse does NOT want this shift"
+    this.preferences = opts.preferences;
+  }
+  get total(){ return this.nurses * this.days * this.shiftsPerDay }
+  idx(n,d,s){ return n*this.days*this.shiftsPerDay + d*this.shiftsPerDay + s }
+
+  randomSchedule(density=0.3){
+    const out = new Uint8Array(this.total);
+    for(let i=0;i<this.total;i++) out[i] = Math.random()<density ? 1 : 0;
+    return out;
+  }
+
+  cost(sch){
+    let hard = 0, soft = 0;
+    // consecutive
+    for(let n=0;n<this.nurses;n++){
+      const off = n*this.days*this.shiftsPerDay;
+      for(let t=0;t<this.days*this.shiftsPerDay-1;t++){
+        if(sch[off+t]===1 && sch[off+t+1]===1) hard++;
+      }
+    }
+    // per-week
+    for(let n=0;n<this.nurses;n++){
+      let sum=0;
+      for(let d=0;d<this.days;d++)
+        for(let s=0;s<this.shiftsPerDay;s++)
+          sum += sch[this.idx(n,d,s)];
+      hard += Math.abs(sum - this.maxPerWeek);
+    }
+    // per-shift coverage
+    for(let d=0;d<this.days;d++){
+      for(let s=0;s<this.shiftsPerDay;s++){
+        let sum=0;
+        for(let n=0;n<this.nurses;n++) sum += sch[this.idx(n,d,s)];
+        if(sum > this.shiftMax[s]) hard += sum - this.shiftMax[s];
+        else if(sum < this.shiftMin[s]) hard += this.shiftMin[s] - sum;
+      }
+    }
+    // preferences
+    for(let n=0;n<this.nurses;n++){
+      for(let d=0;d<this.days;d++){
+        for(let s=0;s<this.shiftsPerDay;s++){
+          if(this.preferences[n][d][s]===1 && sch[this.idx(n,d,s)]===1) soft++;
+        }
+      }
+    }
+    return { total: this.hardPenalty*hard + soft, hard, soft };
+  }
+
+  breakdown(sch){ return this.cost(sch) }
+}
+
+/* ========================================================================
+   Algorithms — async generators yielding (sch, info) snapshots
+   Algorithms:
+     1) Max Shift (greedy integer fill)
+     2) CSP (constraint-satisfied greedy)
+     3) CSP Min Shift (CSP minimising un-requested shifts)
+     4) Hill Climbing
+     5) HC + Random Restart
+     6) Simulated Annealing
+     7) Genetic Algorithm
+   ======================================================================== */
+
+function neighborsFlip(sch){
+  // stream a shuffled order of flip indices
+  const order = [...Array(sch.length).keys()];
+  for(let i=order.length-1;i>0;i--){
+    const j=(Math.random()*(i+1))|0; [order[i],order[j]]=[order[j],order[i]];
+  }
+  return order;
+}
+
+const Algorithms = {
+  maxShift: async function*(nsp){
+    // Greedy: fill each shift slot to shiftMax respecting per-week cap and no-consecutive.
+    const sch = new Uint8Array(nsp.total);
+    const perWeek = new Int32Array(nsp.nurses);
+    let iter = 0;
+    for(let d=0;d<nsp.days;d++){
+      for(let s=0;s<nsp.shiftsPerDay;s++){
+        // score nurses: prefer those with fewest shifts and no preference conflict & no adjacency
+        const cand = [];
+        for(let n=0;n<nsp.nurses;n++){
+          const i = nsp.idx(n,d,s);
+          let score = 0;
+          if(nsp.preferences[n][d][s]===1) score += 3;       // they asked off
+          if(perWeek[n] >= nsp.maxPerWeek) score += 1000;
+          if(i>0 && sch[i-1]===1) score += 1000;              // consecutive
+          if(i+1<sch.length && sch[i+1]===1) score += 1000;
+          score += perWeek[n];                                 // prefer less-loaded
+          cand.push([score,n]);
+        }
+        cand.sort((a,b)=>a[0]-b[0]);
+        const take = Math.min(nsp.shiftMax[s], cand.filter(c=>c[0]<1000).length);
+        for(let k=0;k<take;k++){
+          const n = cand[k][1];
+          sch[nsp.idx(n,d,s)] = 1; perWeek[n]++;
+        }
+        iter++;
+        yield { sch, info:{ iter, label:`day ${d+1}, shift ${s+1}` } };
+      }
+    }
+  },
+
+  csp: async function*(nsp){
+    // Greedy CSP: enforce min coverage first, then cap.
+    const sch = new Uint8Array(nsp.total);
+    const perWeek = new Int32Array(nsp.nurses);
+    let iter = 0;
+    for(let d=0;d<nsp.days;d++){
+      for(let s=0;s<nsp.shiftsPerDay;s++){
+        let placed = 0;
+        const order = [...Array(nsp.nurses).keys()].sort((a,b)=>perWeek[a]-perWeek[b]);
+        for(const n of order){
+          if(placed >= nsp.shiftMin[s]) break;
+          const i = nsp.idx(n,d,s);
+          if(perWeek[n] >= nsp.maxPerWeek) continue;
+          if(i>0 && sch[i-1]===1) continue;
+          if(i+1<sch.length && sch[i+1]===1) continue;
+          sch[i]=1; perWeek[n]++; placed++;
+        }
+        iter++;
+        yield { sch, info:{ iter, label:`coverage d${d+1} s${s+1}` } };
+      }
+    }
+  },
+
+  cspMin: async function*(nsp){
+    // CSP that also avoids requested-off shifts where possible.
+    const sch = new Uint8Array(nsp.total);
+    const perWeek = new Int32Array(nsp.nurses);
+    let iter = 0;
+    for(let d=0;d<nsp.days;d++){
+      for(let s=0;s<nsp.shiftsPerDay;s++){
+        let placed = 0;
+        const order = [...Array(nsp.nurses).keys()].sort((a,b)=>{
+          const pa = nsp.preferences[a][d][s], pb = nsp.preferences[b][d][s];
+          if(pa!==pb) return pa-pb;         // prefer those who didn't request off
+          return perWeek[a]-perWeek[b];
+        });
+        for(const n of order){
+          if(placed >= nsp.shiftMin[s]) break;
+          const i = nsp.idx(n,d,s);
+          if(perWeek[n] >= nsp.maxPerWeek) continue;
+          if(i>0 && sch[i-1]===1) continue;
+          if(i+1<sch.length && sch[i+1]===1) continue;
+          sch[i]=1; perWeek[n]++; placed++;
+        }
+        iter++;
+        yield { sch, info:{ iter } };
+      }
+    }
+  },
+
+  hillClimb: async function*(nsp, initial){
+    let cur = Uint8Array.from(initial ?? nsp.randomSchedule(0.25));
+    let curCost = nsp.cost(cur).total;
+    let iter = 0;
+    yield { sch:cur, info:{iter, label:'start'} };
+    while(true){
+      let bestDelta = 0, bestIdx = -1;
+      for(const i of neighborsFlip(cur)){
+        cur[i] ^= 1;
+        const c = nsp.cost(cur).total;
+        cur[i] ^= 1;
+        if(c - curCost < bestDelta){ bestDelta = c - curCost; bestIdx = i; }
+      }
+      if(bestIdx === -1) return;
+      cur[bestIdx] ^= 1;
+      curCost += bestDelta;
+      iter++;
+      yield { sch:cur, info:{iter, label:'descent'} };
+      if(iter > 400) return;
+    }
+  },
+
+  hillRestart: async function*(nsp){
+    let best = null, bestC = Infinity, iter = 0;
+    for(let restart=0;restart<4;restart++){
+      let cur = nsp.randomSchedule(0.25);
+      let cc = nsp.cost(cur).total;
+      yield { sch:cur, info:{iter:++iter, label:`restart ${restart+1}`} };
+      for(let k=0;k<100;k++){
+        let bd=0, bi=-1;
+        for(const i of neighborsFlip(cur)){
+          cur[i]^=1;
+          const c = nsp.cost(cur).total;
+          cur[i]^=1;
+          if(c-cc<bd){ bd=c-cc; bi=i }
+        }
+        if(bi===-1) break;
+        cur[bi]^=1; cc+=bd; iter++;
+        yield { sch:cur, info:{iter, label:`r${restart+1} descent`} };
+      }
+      if(cc<bestC){ bestC=cc; best=Uint8Array.from(cur) }
+    }
+    yield { sch:best, info:{iter:++iter, label:'final best'} };
+  },
+
+  sa: async function*(nsp){
+    let cur = nsp.randomSchedule(0.28);
+    let cc = nsp.cost(cur).total;
+    let best = Uint8Array.from(cur), bc = cc;
+    let T = 5.0, cooling = 0.985;
+    let iter = 0;
+    yield { sch:cur, info:{iter, label:`T=${T.toFixed(2)}`} };
+    for(let step=0; step<600; step++){
+      const i = (Math.random()*cur.length)|0;
+      cur[i]^=1;
+      const nc = nsp.cost(cur).total;
+      const d = nc - cc;
+      if(d<0 || Math.random() < Math.exp(-d/T)) cc = nc;
+      else cur[i]^=1; // revert
+      if(cc<bc){ bc=cc; best=Uint8Array.from(cur) }
+      T *= cooling;
+      iter++;
+      if(step%3===0) yield { sch:cur, info:{iter, label:`T=${T.toFixed(3)}`} };
+    }
+    yield { sch:best, info:{iter:++iter, label:'accepted best'} };
+  },
+
+  genetic: async function*(nsp){
+    const P = 24, G = 80;
+    let pop = Array.from({length:P}, ()=> nsp.randomSchedule(0.28));
+    let fit = pop.map(s=>nsp.cost(s).total);
+    let iter = 0;
+    for(let g=0;g<G;g++){
+      // pick best to show
+      const bi = fit.indexOf(Math.min(...fit));
+      yield { sch:pop[bi], info:{iter:++iter, label:`gen ${g+1}/${G}`} };
+      // tournament selection
+      const pick = ()=>{
+        const a=(Math.random()*P)|0, b=(Math.random()*P)|0;
+        return fit[a]<fit[b]?pop[a]:pop[b];
+      };
+      const next = [];
+      // elitism
+      next.push(Uint8Array.from(pop[bi]));
+      while(next.length<P){
+        const p1 = pick(), p2 = pick();
+        const cut = (Math.random()*nsp.total)|0;
+        const c = new Uint8Array(nsp.total);
+        for(let k=0;k<nsp.total;k++) c[k] = k<cut ? p1[k] : p2[k];
+        // mutation
+        const m = 1 + ((Math.random()*4)|0);
+        for(let k=0;k<m;k++) c[(Math.random()*nsp.total)|0] ^= 1;
+        next.push(c);
+      }
+      pop = next;
+      fit = pop.map(s=>nsp.cost(s).total);
+    }
+  }
+};
+
+const ALGO_META = [
+  { id:'maxShift',    name:'Max Shift',             tag:'Integer Programming' },
+  { id:'csp',         name:'CSP',                   tag:'Constraint Satisfaction' },
+  { id:'cspMin',      name:'CSP Min Shift',         tag:'CSP + Objective' },
+  { id:'hillClimb',   name:'Hill Climbing',         tag:'Local Search' },
+  { id:'hillRestart', name:'Random Restart HC',     tag:'Stochastic Local Search' },
+  { id:'sa',          name:'Simulated Annealing',   tag:'Metropolis-Hastings' },
+  { id:'genetic',     name:'Genetic Algorithm',     tag:'Evolutionary' }
+];
+
+/* ========================================================================
+   Three.js scene
+   ======================================================================== */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+const scene = new THREE.Scene();
+const fog = new THREE.FogExp2(0x05060c, 0.018);
+scene.fog = fog;
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 500);
+camera.position.set(24, 14, 28);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 10;
+controls.maxDistance = 90;
+controls.target.set(14, 3, 0);
+
+// Lights
+scene.add(new THREE.AmbientLight(0x6676a8, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 1.1);
+key.position.set(14, 24, 10);
+scene.add(key);
+const rimA = new THREE.PointLight(0x5cf6ff, 1.4, 60, 1.8);
+rimA.position.set(-14, 6, -10); scene.add(rimA);
+const rimB = new THREE.PointLight(0xb58bff, 1.2, 60, 1.8);
+rimB.position.set(14, 10, 14); scene.add(rimB);
+const rimC = new THREE.PointLight(0xff6cf0, 0.7, 40, 2.0);
+rimC.position.set(0, -4, 0); scene.add(rimC);
+
+// Floor (reflective-looking grid)
+const floorGeo = new THREE.CircleGeometry(60, 96);
+const floorMat = new THREE.MeshStandardMaterial({
+  color:0x0a0d1a, roughness:0.6, metalness:0.4, transparent:true, opacity:0.9
+});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI/2;
+floor.position.y = -0.5;
+scene.add(floor);
+
+const grid = new THREE.GridHelper(80, 80, 0x2a2f55, 0x141a33);
+grid.material.transparent = true;
+grid.material.opacity = 0.35;
+grid.position.y = -0.49;
+scene.add(grid);
+
+// Particle field
+function makeParticles(){
+  const N = 1200;
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(N*3);
+  const col = new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    const r = 30 + Math.random()*30;
+    const t = Math.random()*Math.PI*2;
+    const y = (Math.random()-0.3)*25;
+    pos[i*3+0] = Math.cos(t)*r * (0.5+Math.random()*0.5);
+    pos[i*3+1] = y;
+    pos[i*3+2] = Math.sin(t)*r * (0.5+Math.random()*0.5);
+    const c = new THREE.Color().setHSL(0.55+Math.random()*0.2, 0.8, 0.6+Math.random()*0.3);
+    col[i*3+0]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b;
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  g.setAttribute('color', new THREE.BufferAttribute(col,3));
+  const m = new THREE.PointsMaterial({
+    size:0.08, vertexColors:true, transparent:true, opacity:0.8,
+    depthWrite:false, blending:THREE.AdditiveBlending
+  });
+  return new THREE.Points(g,m);
+}
+const particles = makeParticles();
+scene.add(particles);
+
+// Postprocessing bloom
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.6, 0.1);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* ========================================================================
+   Schedule cube grid — instanced mesh
+   Layout:
+     X axis -> days (left→right)
+     Y axis -> shifts (bottom→top)
+     Z axis -> nurses (near→far)
+   ======================================================================== */
+const cubeGeo = new THREE.BoxGeometry(0.72, 0.72, 0.72);
+const baseMat = new THREE.MeshStandardMaterial({
+  color:0x1a2140, roughness:0.5, metalness:0.2, transparent:true, opacity:0.22
+});
+const onMat = new THREE.MeshStandardMaterial({
+  color:0xffffff, emissive:0x5cf6ff, emissiveIntensity:1.2, roughness:0.25, metalness:0.6
+});
+
+/* Schedule cube grid has been removed — the 3D scene now shows algorithm
+   trajectory exclusively. buildGrid is kept as a no-op so callers don't
+   change. */
+const tempColor = new THREE.Color();
+function buildGrid(nsp){ rebuildLabels(nsp); }
+
+// Labels (sprites) — in-scene text rendered via CanvasTexture.
+const labelGroup = new THREE.Group();
+scene.add(labelGroup);
+
+function makeLabel(text, opts={}){
+  const {
+    color='#e7ecff', shadow='rgba(92,246,255,0.5)', shadowBlur=18,
+    fontSize=96, bold=true, canvasW=1024, canvasH=256,
+    depthTest=false, opacity=1
+  } = opts;
+  const cv = document.createElement('canvas');
+  cv.width = canvasW; cv.height = canvasH;
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 8;
+  const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false, depthTest, opacity });
+  const sp = new THREE.Sprite(mat);
+  sp.userData = { canvas:cv, texture:tex, fontSize, color, shadow, shadowBlur, bold };
+  writeLabel(sp, text);
+  return sp;
+}
+
+function writeLabel(sp, text, optOverrides={}){
+  const u = { ...sp.userData, ...optOverrides };
+  const cv = u.canvas;
+  const g = cv.getContext('2d');
+  g.clearRect(0,0,cv.width,cv.height);
+  g.font = `${u.bold?'700':'500'} ${u.fontSize}px Inter, sui-sans-serif, sans-serif`;
+  g.textAlign='center'; g.textBaseline='middle';
+  g.shadowColor = u.shadow;
+  g.shadowBlur  = u.shadowBlur;
+  g.fillStyle = u.color;
+  g.fillText(text, cv.width/2, cv.height/2);
+  u.texture.needsUpdate = true;
+  sp.userData = u;
+}
+/* 3D scene labels — all text lives in the scene itself, big and readable. */
+let sceneTitleSprite = null;
+let sceneAlgoSprite = null;
+let sceneXAxisSprite = null;
+let sceneYAxisSprite = null;
+
+function rebuildLabels(nsp){
+  labelGroup.clear();
+
+  // "ALGORITHM TRAJECTORY" header
+  sceneTitleSprite = makeLabel('ALGORITHM TRAJECTORY', {
+    fontSize:64, color:'#b4d6ff', shadow:'rgba(92,246,255,0.4)', shadowBlur:16
+  });
+  sceneTitleSprite.position.set(trajOriginX + trajSpan/2, 13, 0);
+  sceneTitleSprite.scale.set(12, 3, 1);
+  labelGroup.add(sceneTitleSprite);
+
+  // Algorithm name
+  sceneAlgoSprite = makeLabel('—', {
+    fontSize:90, color:'#5cf6ff', shadow:'rgba(181,139,255,0.55)', shadowBlur:22
+  });
+  sceneAlgoSprite.position.set(trajOriginX + trajSpan/2, 10.8, 0);
+  sceneAlgoSprite.scale.set(13, 3.25, 1);
+  labelGroup.add(sceneAlgoSprite);
+
+  // X-axis label
+  sceneXAxisSprite = makeLabel('ITERATIONS  →', {
+    fontSize:96, color:'#5cf6ff', shadow:'rgba(92,246,255,0.75)', shadowBlur:22
+  });
+  sceneXAxisSprite.position.set(trajOriginX + trajSpan/2, -2.0, 0);
+  sceneXAxisSprite.scale.set(14, 3.5, 1);
+  labelGroup.add(sceneXAxisSprite);
+
+  // Y-axis label
+  sceneYAxisSprite = makeLabel('↑  COST', {
+    fontSize:96, color:'#ff6cf0', shadow:'rgba(255,108,240,0.65)', shadowBlur:22
+  });
+  sceneYAxisSprite.position.set(trajOriginX - 2.5, 6, 0);
+  sceneYAxisSprite.scale.set(7, 1.9, 1);
+  labelGroup.add(sceneYAxisSprite);
+}
+
+function setSceneAlgoTitle(name){
+  if(!sceneAlgoSprite) return;
+  writeLabel(sceneAlgoSprite, name.toUpperCase());
+}
+
+/* ========================================================================
+   Algorithm progress trajectory — a 3D path that grows as the algorithm runs.
+   X axis = iterations, Y = cost (height), Z = hard-violation offset.
+   Each iteration materializes as a coloured sphere; a connecting glow-line
+   shows the path. The current iteration pulses; the best-ever iteration is
+   rendered as a gold beacon.
+   ======================================================================== */
+const TRAJ_MAX = 2000;
+const trajOriginX = -4;
+const trajSpan = 34;             // X-axis occupies [trajOriginX, trajOriginX+trajSpan]
+function trajStepForCount(n){ return n > 1 ? trajSpan / (n-1) : 0 }
+
+const trajGroup = new THREE.Group();
+scene.add(trajGroup);
+
+// Axis baseline (faint beam at y=0)
+const axisGeom = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(trajOriginX, 0, 0), new THREE.Vector3(trajOriginX + trajSpan, 0, 0)
+]);
+const axisMat = new THREE.LineBasicMaterial({ color:0x5cf6ff, transparent:true, opacity:0.18 });
+const axisLine = new THREE.Line(axisGeom, axisMat);
+trajGroup.add(axisLine);
+
+// Guideline "ticks" at regular y-heights
+const tickGroup = new THREE.Group();
+for(let y=2;y<=12;y+=2){
+  const g = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(trajOriginX-0.2, y, 0), new THREE.Vector3(trajOriginX+trajSpan+0.5, y, 0)
+  ]);
+  const m = new THREE.LineDashedMaterial({ color:0x1a2140, dashSize:0.2, gapSize:0.35, transparent:true, opacity:0.45 });
+  const l = new THREE.Line(g, m);
+  l.computeLineDistances();
+  tickGroup.add(l);
+}
+trajGroup.add(tickGroup);
+
+// Instanced spheres
+const sphereGeo = new THREE.SphereGeometry(0.24, 14, 12);
+const sphereMat = new THREE.MeshStandardMaterial({ vertexColors:true, emissive:0xffffff, emissiveIntensity:0.9, roughness:0.3, metalness:0.5 });
+const trajSpheres = new THREE.InstancedMesh(sphereGeo, sphereMat, TRAJ_MAX);
+trajSpheres.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(TRAJ_MAX*3), 3);
+trajSpheres.count = 0;
+trajGroup.add(trajSpheres);
+
+// Line connecting the trajectory (as a BufferGeometry with dynamic draw range)
+const lineGeo = new THREE.BufferGeometry();
+const linePos = new Float32Array(TRAJ_MAX*3);
+const lineCol = new Float32Array(TRAJ_MAX*3);
+lineGeo.setAttribute('position', new THREE.BufferAttribute(linePos,3));
+lineGeo.setAttribute('color', new THREE.BufferAttribute(lineCol,3));
+lineGeo.setDrawRange(0, 0);
+const lineMat = new THREE.LineBasicMaterial({ vertexColors:true, transparent:true, opacity:0.85 });
+const trajLine = new THREE.Line(lineGeo, lineMat);
+trajGroup.add(trajLine);
+
+// Current & best markers
+const currentMarker = new THREE.Mesh(
+  new THREE.SphereGeometry(0.5, 24, 20),
+  new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0x5cf6ff, emissiveIntensity:1.6, roughness:0.15, metalness:0.7 })
+);
+currentMarker.visible = false;
+trajGroup.add(currentMarker);
+
+const currentHalo = new THREE.Mesh(
+  new THREE.RingGeometry(0.7, 0.92, 48),
+  new THREE.MeshBasicMaterial({ color:0x5cf6ff, transparent:true, opacity:0.5, side:THREE.DoubleSide })
+);
+currentHalo.rotation.x = -Math.PI/2;
+currentHalo.visible = false;
+trajGroup.add(currentHalo);
+
+const bestMarker = new THREE.Mesh(
+  new THREE.OctahedronGeometry(0.42, 0),
+  new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0xffd166, emissiveIntensity:1.9, roughness:0.2, metalness:0.8 })
+);
+bestMarker.visible = false;
+trajGroup.add(bestMarker);
+
+// Drop pillar (ground shadow column dropping from sphere to the baseline)
+const pillarGeo = new THREE.BufferGeometry();
+const pillarPos = new Float32Array(TRAJ_MAX * 6); // 2 points per sphere
+const pillarCol = new Float32Array(TRAJ_MAX * 6);
+pillarGeo.setAttribute('position', new THREE.BufferAttribute(pillarPos, 3));
+pillarGeo.setAttribute('color', new THREE.BufferAttribute(pillarCol, 3));
+pillarGeo.setDrawRange(0, 0);
+const pillarMat = new THREE.LineBasicMaterial({ vertexColors:true, transparent:true, opacity:0.35 });
+const pillars = new THREE.LineSegments(pillarGeo, pillarMat);
+trajGroup.add(pillars);
+
+// Per-sphere cost label pool (created lazily as trajectory grows)
+const costLabelPool = [];
+function getCostLabel(index){
+  while(costLabelPool.length <= index){
+    const sp = makeLabel('', {
+      fontSize:70, color:'#ffffff', shadow:'rgba(0,0,0,0.9)', shadowBlur:14,
+      canvasW:256, canvasH:96
+    });
+    sp.scale.set(2.0, 0.75, 1);
+    sp.visible = false;
+    trajGroup.add(sp);
+    costLabelPool.push(sp);
+  }
+  return costLabelPool[index];
+}
+
+// X-axis tick label pool (iteration numbers)
+const MAX_AXIS_TICKS = 14;
+const axisTickPool = [];
+for(let i=0;i<MAX_AXIS_TICKS;i++){
+  const sp = makeLabel('', {
+    fontSize:64, color:'#c2e1ff', shadow:'rgba(92,246,255,0.5)', shadowBlur:10,
+    canvasW:256, canvasH:96
+  });
+  sp.scale.set(2.0, 0.75, 1);
+  sp.visible = false;
+  trajGroup.add(sp);
+  axisTickPool.push(sp);
+}
+
+// Trajectory state
+const trajectory = [];           // { iter, cost, hard, pos:Vector3, color:Color }
+let trajBestCost = Infinity;
+let trajBestIndex = -1;
+
+function costToHue(cost){
+  // cost normalized per current trajectory window
+  if(trajectory.length === 0) return 0.55;
+  const mn = Math.min(...trajectory.map(t=>t.cost));
+  const mx = Math.max(...trajectory.map(t=>t.cost));
+  const range = mx-mn || 1;
+  const k = (cost-mn)/range;       // 0 = best, 1 = worst
+  // hue: green (0.33) when low, through cyan (0.5), magenta (0.9) to red (0.0) when high
+  // easier: lerp cyan(hsl 180°) -> magenta(hsl 310°)
+  return 0.5 + k*0.35;
+}
+
+function resetTrajectory(){
+  trajectory.length = 0;
+  trajBestCost = Infinity; trajBestIndex = -1;
+  trajSpheres.count = 0;
+  lineGeo.setDrawRange(0, 0);
+  pillarGeo.setDrawRange(0, 0);
+  currentMarker.visible = false;
+  currentHalo.visible = false;
+  bestMarker.visible = false;
+  // Hide all per-sphere cost labels & axis ticks
+  costLabelPool.forEach(sp=>sp.visible = false);
+  axisTickPool.forEach(sp=>sp.visible = false);
+}
+
+const _tmpM = new THREE.Matrix4();
+const _tmpP = new THREE.Vector3();
+const _tmpQ = new THREE.Quaternion();
+const _tmpS = new THREE.Vector3(1,1,1);
+const _tmpC = new THREE.Color();
+
+function pushTrajectoryPoint(iter, costObj){
+  if(trajectory.length >= TRAJ_MAX) return;
+  const i = trajectory.length;
+  const y = Math.min(12, 0.5 + Math.log2(1 + costObj.total) * 1.1);
+  const z = Math.min(4, costObj.hard * 0.25) - 1;
+  const pos = new THREE.Vector3(0, y, z);       // x will be computed after redistribution
+
+  const hue = costToHue(costObj.total);
+  const col = new THREE.Color().setHSL(hue, 0.85, 0.6);
+
+  trajectory.push({ iter, cost:costObj.total, hard:costObj.hard, soft:costObj.soft, pos, color:col });
+
+  if(costObj.total < trajBestCost){ trajBestCost = costObj.total; trajBestIndex = i; }
+
+  // Recolor everyone (cheap enough up to a few hundred points)
+  for(let k=0;k<trajectory.length;k++){
+    const t = trajectory[k];
+    const h = costToHue(t.cost);
+    t.color.setHSL(h, 0.85, 0.58);
+  }
+
+  // Redistribute X positions so the whole trajectory always fits the span
+  const step = trajStepForCount(trajectory.length);
+  for(let k=0;k<trajectory.length;k++){
+    trajectory[k].pos.x = trajOriginX + k*step;
+  }
+
+  // Write instance matrices + colors
+  for(let k=0;k<trajectory.length;k++){
+    const t = trajectory[k];
+    _tmpP.copy(t.pos);
+    _tmpM.compose(_tmpP, _tmpQ, _tmpS);
+    trajSpheres.setMatrixAt(k, _tmpM);
+    trajSpheres.setColorAt(k, t.color);
+
+    linePos[k*3+0] = t.pos.x;
+    linePos[k*3+1] = t.pos.y;
+    linePos[k*3+2] = t.pos.z;
+    lineCol[k*3+0] = t.color.r;
+    lineCol[k*3+1] = t.color.g;
+    lineCol[k*3+2] = t.color.b;
+
+    // pillars (two points per segment)
+    pillarPos[k*6+0] = t.pos.x;
+    pillarPos[k*6+1] = t.pos.y;
+    pillarPos[k*6+2] = t.pos.z;
+    pillarPos[k*6+3] = t.pos.x;
+    pillarPos[k*6+4] = 0;
+    pillarPos[k*6+5] = t.pos.z;
+    const cf = 0.9;
+    pillarCol[k*6+0] = t.color.r*cf;
+    pillarCol[k*6+1] = t.color.g*cf;
+    pillarCol[k*6+2] = t.color.b*cf;
+    pillarCol[k*6+3] = t.color.r*0.1;
+    pillarCol[k*6+4] = t.color.g*0.1;
+    pillarCol[k*6+5] = t.color.b*0.1;
+  }
+  trajSpheres.count = trajectory.length;
+  trajSpheres.instanceMatrix.needsUpdate = true;
+  if(trajSpheres.instanceColor) trajSpheres.instanceColor.needsUpdate = true;
+  lineGeo.attributes.position.needsUpdate = true;
+  lineGeo.attributes.color.needsUpdate = true;
+  lineGeo.setDrawRange(0, trajectory.length);
+  pillarGeo.attributes.position.needsUpdate = true;
+  pillarGeo.attributes.color.needsUpdate = true;
+  pillarGeo.setDrawRange(0, trajectory.length * 2);
+
+  // Per-sphere cost labels — position above each sphere, text = cost
+  for(let k=0;k<trajectory.length;k++){
+    const t = trajectory[k];
+    const sp = getCostLabel(k);
+    // only (re)write text when cost actually changed (first time or if we ever do rewrites)
+    if(sp.userData.lastCost !== t.cost){
+      writeLabel(sp, String(t.cost), { color:'#ffffff', shadow:'rgba(0,0,0,0.9)', shadowBlur:14, fontSize:70 });
+      sp.userData.lastCost = t.cost;
+    }
+    sp.position.set(t.pos.x, t.pos.y + 0.9, t.pos.z);
+    sp.visible = true;
+  }
+  // hide labels past the current tip (in case of old leftovers)
+  for(let k=trajectory.length;k<costLabelPool.length;k++) costLabelPool[k].visible = false;
+
+  // X-axis tick labels — show iteration numbers at ~8 points along the axis
+  const N = trajectory.length;
+  axisTickPool.forEach(sp=>sp.visible = false);
+  if(N > 0){
+    const target = Math.min(MAX_AXIS_TICKS, N <= 1 ? 1 : 8);
+    const indices = new Set([0, N-1]);
+    if(N > 2){
+      const step = (N-1) / (target-1);
+      for(let t=0;t<target;t++) indices.add(Math.round(t*step));
+    }
+    [...indices].slice(0, MAX_AXIS_TICKS).forEach((idx, i)=>{
+      const sp = axisTickPool[i];
+      const p = trajectory[idx];
+      writeLabel(sp, String(p.iter), { color:'#c2e1ff', shadow:'rgba(92,246,255,0.5)', shadowBlur:10, fontSize:64 });
+      sp.position.set(p.pos.x, -0.85, 0);
+      sp.visible = true;
+    });
+  }
+
+  // Current marker (head of trajectory)
+  const head = trajectory[trajectory.length-1];
+  currentMarker.position.copy(head.pos);
+  currentMarker.material.emissive.copy(head.color);
+  currentMarker.visible = true;
+  currentHalo.position.set(head.pos.x, 0.02, head.pos.z);
+  currentHalo.material.color.copy(head.color);
+  currentHalo.visible = true;
+
+  if(trajBestIndex >= 0){
+    const b = trajectory[trajBestIndex];
+    bestMarker.position.copy(b.pos);
+    bestMarker.visible = true;
+  }
+}
+
+/* ========================================================================
+   Schedule update — refresh the inline 2D editor to show assignments.
+   (The 3D scene no longer renders nurse shifts; it shows the algorithm
+   trajectory exclusively.)
+   ======================================================================== */
+function applySchedule(sch){
+  currentSchedule = sch ? Uint8Array.from(sch) : null;
+  if(typeof renderInlineGrid === 'function') renderInlineGrid();
+  if(typeof renderShiftResultTable === 'function') renderShiftResultTable();
+}
+
+/* ========================================================================
+   Trajectory sphere hover — tooltip with iter / cost / violation info.
+   ======================================================================== */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const tipEl = document.getElementById('tip');
+let hoveredId = -1;
+let lastPointer = {x:0,y:0};
+
+canvas.addEventListener('pointermove', (e)=>{
+  const r = canvas.getBoundingClientRect();
+  pointer.x = ((e.clientX - r.left)/r.width)*2 - 1;
+  pointer.y = -((e.clientY - r.top)/r.height)*2 + 1;
+  lastPointer.x = e.clientX; lastPointer.y = e.clientY;
+});
+canvas.addEventListener('pointerleave', ()=>{ hoveredId = -1; tipEl.classList.remove('show') });
+
+function updateHover(){
+  if(trajSpheres.count === 0){ hoveredId = -1; tipEl.classList.remove('show'); return }
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObject(trajSpheres, false)[0];
+  if(hit && hit.instanceId != null){
+    const i = hit.instanceId;
+    if(i !== hoveredId){
+      hoveredId = i;
+      const t = trajectory[i];
+      tipEl.innerHTML = `<b>Iteration ${t.iter}</b><br/>`+
+        `Cost <b style="color:var(--cyan)">${t.cost}</b> · `+
+        `<span style="color:var(--red)">hard ${t.hard}</span> · `+
+        `<span style="color:var(--amber)">soft ${t.soft}</span>`;
+      tipEl.classList.add('show');
+    }
+    tipEl.style.left = lastPointer.x + 'px';
+    tipEl.style.top = lastPointer.y + 'px';
+  } else {
+    hoveredId = -1; tipEl.classList.remove('show');
+  }
+}
+
+/* ========================================================================
+   State machine & UI wiring
+   ======================================================================== */
+let nsp = null;
+let currentAlgo = 'hillClimb';
+let running = false;
+let iterCount = 0;
+let bestCost = Infinity;
+let currentCost = Infinity;
+let costHistory = [];
+let runStartedAt = 0;
+let autoRotate = false;
+let runToken = 0;
+
+function makePreferences(nurses, days, shiftsPerDay){
+  // ~35% chance any slot is marked "requested off"
+  const p = [];
+  for(let n=0;n<nurses;n++){
+    const nd = [];
+    for(let d=0;d<days;d++){
+      const ns = [];
+      for(let s=0;s<shiftsPerDay;s++) ns.push(Math.random()<0.35 ? 1 : 0);
+      nd.push(ns);
+    }
+    p.push(nd);
+  }
+  return p;
+}
+
+function buildNSP(){
+  const nurses = +document.getElementById('rNurses').value;
+  const days   = +document.getElementById('rDays').value;
+  const sPer   = +document.getElementById('rShifts').value;
+  const maxW   = +document.getElementById('rMax').value;
+  const prefs  = makePreferences(nurses, days, sPer);
+  nsp = new NSP({
+    nurses, days, shiftsPerDay:sPer, maxPerWeek:maxW,
+    shiftMin: Array(sPer).fill(Math.max(1, Math.floor(nurses/4))),
+    shiftMax: Array(sPer).fill(Math.max(2, Math.floor(nurses/2)+1)),
+    hardPenalty:10, preferences:prefs
+  });
+  // Default nurse names (can be renamed inline)
+  nsp.nurseNames = Array.from({length:nurses}, (_,i)=>`Nurse ${i+1}`);
+  editorNurse = Math.min(editorNurse, nurses-1);
+  currentSchedule = null;
+  rebuildLabels(nsp);
+  resetTelemetry();
+  syncEditorViews();
+  renderShiftResultTable();
+}
+
+function resetTelemetry(){
+  iterCount = 0; bestCost = Infinity; currentCost = Infinity;
+  costHistory.length = 0;
+  document.getElementById('sIter').textContent = 0;
+  document.getElementById('sCost').textContent = '—';
+  document.getElementById('sBest').textContent = '—';
+  document.getElementById('sHard').textContent = 0;
+  document.getElementById('sSoft').textContent = 0;
+  document.getElementById('chipTime').textContent = '0.00s';
+  document.getElementById('mMin').textContent = '—';
+  document.getElementById('mMax').textContent = '—';
+  resetTrajectory();
+  drawChart();
+}
+
+function setStatus(txt, live){
+  const el = document.getElementById('chipStatus');
+  el.classList.remove('idle','live');
+  el.classList.add(live?'live':'idle');
+  document.getElementById('statusText').textContent = txt;
+}
+
+// Populate the bottom algorithm bar — each card opens the viz window & runs
+const algoScroller = document.getElementById('algoScroller');
+const algoCards = {};
+ALGO_META.forEach((a,i)=>{
+  const el = document.createElement('div');
+  el.className = 'algo-card';
+  el.dataset.id = a.id;
+  el.innerHTML = `
+    <div class="idx"><span class="n">${i+1}</span>${a.tag}</div>
+    <div class="name">${a.name}</div>
+    <div class="tag">Click to run</div>`;
+  el.onclick = ()=>{
+    if(running) stopRun();
+    currentAlgo = a.id;
+    document.querySelectorAll('.algo-card').forEach(x=>x.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('chipAlgo').textContent = a.name;
+    openViz(a);
+    startRun();
+  };
+  algoCards[a.id] = el;
+  algoScroller.appendChild(el);
+});
+algoCards[currentAlgo].classList.add('active');
+document.getElementById('chipAlgo').textContent = ALGO_META.find(a=>a.id===currentAlgo).name;
+document.getElementById('btnStop').addEventListener('click', ()=>stopRun());
+document.getElementById('btnVizClose').addEventListener('click', ()=>closeViz());
+const _clearTrailBtn = document.getElementById('btnClearTrail');
+if(_clearTrailBtn) _clearTrailBtn.addEventListener('click', ()=>{ resetTrajectory(); resetTelemetry() });
+
+/* Viz window open/close */
+let vizOpen = false;
+const canvasWrapEl = document.getElementById('vizCanvasWrap');
+
+function resizeVizCanvas(){
+  if(!canvasWrapEl) return;
+  const w = Math.max(1, canvasWrapEl.clientWidth);
+  const h = Math.max(1, canvasWrapEl.clientHeight);
+  renderer.setSize(w, h, false);
+  composer.setSize(w, h);
+  bloom.resolution.set(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+
+function openViz(algoMeta){
+  vizOpen = true;
+  document.body.classList.add('viz-open');
+  document.getElementById('vizAlgoName').textContent = algoMeta.name;
+  document.getElementById('vizSub').textContent = algoMeta.tag;
+  document.getElementById('vizHead').classList.remove('idle');
+  setSceneAlgoTitle(algoMeta.name);
+  renderShiftResultTable();
+  // Let layout settle before measuring the canvas container
+  requestAnimationFrame(()=>{ resizeVizCanvas(); sizeChart(); });
+}
+function closeViz(){
+  if(running) stopRun();
+  vizOpen = false;
+  document.body.classList.remove('viz-open');
+}
+
+// React to popup resizes (window resize, devtools, etc.)
+if(window.ResizeObserver && canvasWrapEl){
+  const ro = new ResizeObserver(()=>{ if(vizOpen) resizeVizCanvas() });
+  ro.observe(canvasWrapEl);
+}
+
+// Parameter bindings
+['rNurses','rDays','rShifts','rMax','rSpeed'].forEach(id=>{
+  const el = document.getElementById(id);
+  const out = document.getElementById('o'+id.slice(1));
+  el.addEventListener('input', ()=>{
+    out.textContent = id==='rSpeed' ? (+el.value).toFixed(2)+'×' : el.value;
+    if(id==='rSpeed') return;
+    if(running) stopRun();
+    if(id==='rMax'){
+      // cap change only — keep preferences & grid
+      if(nsp){ nsp.maxPerWeek = +el.value; resetTelemetry(); applySchedule(new Uint8Array(nsp.total)) }
+    } else {
+      buildNSP();
+    }
+  });
+});
+
+// Buttons
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  stopRun(); buildNSP();
+});
+document.getElementById('btnEdit').addEventListener('click', ()=>{
+  if(running) stopRun();
+  openEditor();
+});
+const btnAutoEl = document.getElementById('btnAuto');
+function updateAutoRotateBtn(){
+  btnAutoEl.textContent = 'Auto-rotate' + (autoRotate ? ' ✓' : '');
+  btnAutoEl.classList.toggle('primary', autoRotate);
+  btnAutoEl.classList.toggle('ghost', !autoRotate);
+}
+btnAutoEl.addEventListener('click', ()=>{ autoRotate = !autoRotate; updateAutoRotateBtn() });
+updateAutoRotateBtn();
+document.getElementById('btnTop').addEventListener('click', ()=>flyCamera(new THREE.Vector3(14, 34, 0.01), new THREE.Vector3(14, 3, 0)));
+document.getElementById('btnIso').addEventListener('click', ()=>flyCamera(new THREE.Vector3(24, 14, 28), new THREE.Vector3(14, 3, 0)));
+document.getElementById('btnFront').addEventListener('click', ()=>flyCamera(new THREE.Vector3(14, 6, 34), new THREE.Vector3(14, 3, 0)));
+
+function flyCamera(target, look){
+  const from = camera.position.clone(), to = target.clone();
+  const fromT = controls.target.clone(), toT = (look || controls.target).clone();
+  const t0 = performance.now(), dur = 900;
+  function step(now){
+    const k = Math.min(1, (now-t0)/dur);
+    const e = k<0.5 ? 2*k*k : 1 - Math.pow(-2*k+2,2)/2;
+    camera.position.lerpVectors(from, to, e);
+    controls.target.lerpVectors(fromT, toT, e);
+    controls.update();
+    if(k<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// Keyboard
+addEventListener('keydown', (e)=>{
+  if(e.target.tagName === 'INPUT') return;
+  if(modalBack.classList.contains('open') && e.code === 'Escape'){ closeEditor(); return }
+  if(vizOpen && e.code === 'Escape'){ closeViz(); return }
+  if(e.code === 'KeyR') { stopRun(); buildNSP() }
+  if(e.code === 'KeyA') autoRotate = !autoRotate;
+  if(e.code === 'KeyE') { if(running) stopRun(); openEditor() }
+});
+
+/* ========================================================================
+   Algorithm runner
+   ======================================================================== */
+async function startRun(){
+  if(!nsp) return;
+  runToken++;
+  const token = runToken;
+  running = true;
+  setStatus(ALGO_META.find(a=>a.id===currentAlgo).name+' running', true);
+  document.getElementById('btnStop').disabled = false;
+  Object.values(algoCards).forEach(c=>c.classList.remove('running'));
+  algoCards[currentAlgo].classList.add('running');
+  resetTelemetry();
+  runStartedAt = performance.now();
+  const gen = Algorithms[currentAlgo](nsp);
+  for await (const step of gen){
+    if(token !== runToken) return; // stopped
+    if(!running) return;
+    const ct = nsp.cost(step.sch);
+    currentCost = ct.total;
+    bestCost = Math.min(bestCost, currentCost);
+    iterCount = step.info?.iter ?? (iterCount+1);
+    costHistory.push(currentCost);
+    applySchedule(step.sch);
+    pushTrajectoryPoint(iterCount, ct);
+
+    document.getElementById('sIter').textContent = iterCount;
+    document.getElementById('sCost').textContent = currentCost;
+    document.getElementById('sBest').textContent = bestCost;
+    document.getElementById('sHard').textContent = ct.hard;
+    document.getElementById('sSoft').textContent = ct.soft;
+    document.getElementById('chipTime').textContent = ((performance.now()-runStartedAt)/1000).toFixed(2)+'s';
+    if(costHistory.length){
+      document.getElementById('mMin').textContent = Math.min(...costHistory);
+      document.getElementById('mMax').textContent = Math.max(...costHistory);
+    }
+    drawChart();
+
+    // pacing
+    const speed = +document.getElementById('rSpeed').value;
+    const delay = Math.max(4, 60 / speed);
+    await new Promise(r=>setTimeout(r, delay));
+  }
+  stopRun(true);
+}
+
+function stopRun(completed=false){
+  running = false;
+  runToken++;
+  document.getElementById('btnStop').disabled = true;
+  Object.values(algoCards).forEach(c=>c.classList.remove('running'));
+  setStatus(completed?'Converged':'Idle', false);
+  const vh = document.getElementById('vizHead');
+  if(vh){
+    vh.classList.add('idle');
+    const sub = document.getElementById('vizSub');
+    if(sub) sub.textContent = completed ? 'Run complete' : 'Stopped';
+  }
+}
+
+/* ========================================================================
+   Problem editor — Hard Constraints (modal)
+   ======================================================================== */
+const modalBack = document.getElementById('modalBack');
+
+const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function openEditor(){
+  renderConstraintsEditor();
+  modalBack.classList.add('open');
+}
+function closeEditor(){ modalBack.classList.remove('open') }
+
+document.getElementById('modalClose').onclick = closeEditor;
+document.getElementById('modalCancel').onclick = closeEditor;
+document.getElementById('modalRun').onclick = ()=>{ closeEditor(); startRun() };
+modalBack.addEventListener('click', e=>{ if(e.target === modalBack) closeEditor() });
+
+function countNurseOffs(n){
+  let c=0;
+  for(let d=0;d<nsp.days;d++) for(let s=0;s<nsp.shiftsPerDay;s++)
+    if(nsp.preferences[n][d][s]===1) c++;
+  return c;
+}
+
+/* Inline editor state */
+let editorNurse = 0;
+let currentSchedule = null;       // Uint8Array — the schedule currently visualized
+
+function nurseName(n){
+  return (nsp.nurseNames && nsp.nurseNames[n]) || `Nurse ${n+1}`;
+}
+
+function renderInlineTabs(){
+  const wrap = document.getElementById('inlineNurseTabs');
+  wrap.innerHTML = '';
+  for(let n=0;n<nsp.nurses;n++){
+    const el = document.createElement('div');
+    el.className = 'nurse-tab' + (n===editorNurse?' active':'');
+    const short = nurseName(n).length > 10 ? nurseName(n).slice(0,10)+'…' : nurseName(n);
+    el.innerHTML = `${short} <span class="count">${countNurseOffs(n)}</span>`;
+    el.title = nurseName(n);
+    el.onclick = ()=>{
+      editorNurse = n; renderInlineTabs(); renderInlineGrid(); refreshRenameInput();
+    };
+    wrap.appendChild(el);
+  }
+}
+
+function refreshRenameInput(){
+  const inp = document.getElementById('nurseRenameInput');
+  if(!inp || !nsp) return;
+  inp.value = nurseName(editorNurse);
+  inp.placeholder = `Nurse ${editorNurse+1}`;
+}
+
+function isAssigned(n, d, s){
+  if(!currentSchedule) return false;
+  return currentSchedule[nsp.idx(n,d,s)] === 1;
+}
+
+function renderInlineGrid(){
+  const wrap = document.getElementById('inlineReqGrid');
+  let html = `<table class="req-grid"><thead><tr><th></th>`;
+  for(let s=0;s<nsp.shiftsPerDay;s++) html += `<th>${SHIFT_NAMES[s] ?? ('S'+(s+1))}</th>`;
+  html += `</tr></thead><tbody>`;
+  for(let d=0;d<nsp.days;d++){
+    html += `<tr><th>${DAY_LABELS[d] ?? ('Day '+(d+1))}</th>`;
+    for(let s=0;s<nsp.shiftsPerDay;s++){
+      const off = nsp.preferences[editorNurse][d][s]===1;
+      const asg = isAssigned(editorNurse, d, s);
+      const lbl = asg ? 'Work' : (off?'Off':'Ok');
+      html += `<td><div class="req-cell ${off?'off':''} ${asg?'assigned':''}" data-d="${d}" data-s="${s}">
+        <span class="badge">${lbl}</span></div></td>`;
+    }
+    html += `</tr>`;
+  }
+  html += `</tbody></table>`;
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.req-cell').forEach(cell=>{
+    cell.onclick = ()=>{
+      const d = +cell.dataset.d, s = +cell.dataset.s;
+      togglePref(editorNurse, d, s);
+    };
+  });
+  // small status chip showing violations for this nurse
+  const chip = document.getElementById('inlineResultChip');
+  if(!currentSchedule){ chip.style.display='none'; return }
+  let work=0, vio=0, off=0;
+  for(let d=0;d<nsp.days;d++) for(let s=0;s<nsp.shiftsPerDay;s++){
+    if(isAssigned(editorNurse,d,s)) work++;
+    if(nsp.preferences[editorNurse][d][s]===1){
+      off++;
+      if(isAssigned(editorNurse,d,s)) vio++;
+    }
+  }
+  chip.style.display='flex'; chip.style.gap='6px'; chip.style.flexWrap='wrap';
+  chip.innerHTML =
+    `<span class="small-chip"><span class="dot"></span>${work} shifts scheduled</span>`+
+    (vio>0 ? `<span class="small-chip warn"><span class="dot"></span>${vio} preference break${vio===1?'':'s'}</span>` : '');
+}
+
+function syncEditorViews(){
+  renderInlineTabs();
+  renderInlineGrid();
+  refreshRenameInput();
+  renderShiftResultTable();
+}
+
+/* Rename input */
+document.getElementById('nurseRenameInput').addEventListener('input', (e)=>{
+  if(!nsp) return;
+  const v = e.target.value.trim() || `Nurse ${editorNurse+1}`;
+  nsp.nurseNames[editorNurse] = v;
+  renderInlineTabs();
+  renderShiftResultTable();
+});
+document.getElementById('nurseRenameInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') e.target.blur();
+});
+
+/* Schedule-by-shift result table — renders into both the main page and
+   the visualization side panel so the schedule is visible during a run. */
+function renderShiftResultTable(){
+  const wraps = [
+    document.getElementById('shiftResultWrap'),
+    document.getElementById('vizShiftResultWrap')
+  ].filter(Boolean);
+  if(wraps.length === 0) return;
+  if(!currentSchedule){
+    for(const w of wraps) w.innerHTML = `<div class="empty">Run an algorithm to see who works each shift.</div>`;
+    return;
+  }
+  let html = `<table><thead><tr><th class="day">Day</th>`;
+  for(let s=0;s<nsp.shiftsPerDay;s++) html += `<th>${SHIFT_NAMES[s] ?? ('S'+(s+1))}</th>`;
+  html += `</tr></thead><tbody>`;
+  for(let d=0;d<nsp.days;d++){
+    html += `<tr><td class="day">${DAY_LABELS[d] ?? ('Day '+(d+1))}</td>`;
+    for(let s=0;s<nsp.shiftsPerDay;s++){
+      const assignedNurses = [];
+      for(let n=0;n<nsp.nurses;n++){
+        if(currentSchedule[nsp.idx(n,d,s)] === 1){
+          const isViol = nsp.preferences[n][d][s] === 1;
+          assignedNurses.push({ name:nurseName(n), violation:isViol });
+        }
+      }
+      if(assignedNurses.length === 0){
+        html += `<td><div class="names"><span class="pill" style="opacity:.4;background:rgba(255,255,255,.03);color:var(--ink-dim);border-color:var(--line)">—</span></div></td>`;
+      } else {
+        html += `<td><div class="names">`+
+          assignedNurses.map(a=>`<span class="pill ${a.violation?'violation':''}" title="${a.violation?'violates preference':'assigned'}">${a.name}</span>`).join('')+
+          `</div></td>`;
+      }
+    }
+    html += `</tr>`;
+  }
+  html += `</tbody></table>`;
+  for(const w of wraps) w.innerHTML = html;
+}
+
+function togglePref(n, d, s){
+  nsp.preferences[n][d][s] = nsp.preferences[n][d][s]===1 ? 0 : 1;
+  if(running) stopRun();
+  currentSchedule = null;
+  resetTelemetry();
+  syncEditorViews();
+}
+
+document.getElementById('inlineReqRandom').onclick = ()=>{
+  nsp.preferences = makePreferences(nsp.nurses, nsp.days, nsp.shiftsPerDay);
+  if(running) stopRun();
+  currentSchedule = null;
+  resetTelemetry();
+  syncEditorViews();
+};
+document.getElementById('inlineReqClear').onclick = ()=>{
+  for(let n=0;n<nsp.nurses;n++) for(let d=0;d<nsp.days;d++) for(let s=0;s<nsp.shiftsPerDay;s++)
+    nsp.preferences[n][d][s] = 0;
+  if(running) stopRun();
+  currentSchedule = null;
+  resetTelemetry();
+  syncEditorViews();
+};
+
+/* Hard constraints editor */
+function makeNumberInput(value, min, max, onChange){
+  const box = document.createElement('div');
+  box.className = 'con-input';
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.inputMode = 'numeric';
+  inp.value = value; inp.dataset.min = min; inp.dataset.max = max;
+  const step = document.createElement('div');
+  step.className = 'con-stepper';
+  step.innerHTML = `<button type="button">▲</button><button type="button">▼</button>`;
+  const [up, down] = step.querySelectorAll('button');
+  const commit = (v)=>{
+    const n = Math.max(min, Math.min(max, Math.round(+v||0)));
+    inp.value = n;
+    onChange(n);
+  };
+  up.onclick   = ()=>commit(+inp.value + 1);
+  down.onclick = ()=>commit(+inp.value - 1);
+  inp.addEventListener('change', ()=>commit(inp.value));
+  inp.addEventListener('blur',   ()=>commit(inp.value));
+  box.appendChild(inp); box.appendChild(step);
+  return box;
+}
+
+function renderConstraintsEditor(){
+  // Max per week
+  const wkBox = document.getElementById('conMaxWeek');
+  wkBox.innerHTML = '';
+  wkBox.appendChild(makeNumberInput(nsp.maxPerWeek, 0, nsp.days*nsp.shiftsPerDay, v=>{
+    nsp.maxPerWeek = v;
+    const slider = document.getElementById('rMax');
+    if(+slider.value !== v){ slider.value = v; document.getElementById('oMax').textContent = v }
+    if(running) stopRun();
+    resetTelemetry(); applySchedule(new Uint8Array(nsp.total));
+  }));
+
+  // Hard penalty
+  const pen = document.getElementById('conPenalty');
+  pen.innerHTML = '';
+  pen.appendChild(makeNumberInput(nsp.hardPenalty, 1, 100, v=>{
+    nsp.hardPenalty = v;
+    if(running) stopRun();
+    resetTelemetry();
+  }));
+
+  // Per-shift min / max
+  const shifts = document.getElementById('conShifts');
+  shifts.innerHTML = '';
+  for(let s=0;s<nsp.shiftsPerDay;s++){
+    const row = document.createElement('div');
+    row.className = 'con-row';
+    row.style.padding = '8px 10px';
+    row.innerHTML = `<div class="k" style="min-width:100px">${SHIFT_NAMES[s] ?? ('Shift '+(s+1))}</div>`;
+    const v = document.createElement('div'); v.className = 'v';
+
+    const minWrap = document.createElement('div');
+    minWrap.style.display='flex'; minWrap.style.alignItems='center'; minWrap.style.gap='6px';
+    const minLbl = document.createElement('label'); minLbl.textContent = 'min';
+    minLbl.style.cssText = 'font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)';
+    minWrap.appendChild(minLbl);
+    minWrap.appendChild(makeNumberInput(nsp.shiftMin[s], 0, nsp.nurses, val=>{
+      nsp.shiftMin[s] = Math.min(val, nsp.shiftMax[s]);
+      if(running) stopRun(); resetTelemetry();
+    }));
+
+    const maxWrap = document.createElement('div');
+    maxWrap.style.display='flex'; maxWrap.style.alignItems='center'; maxWrap.style.gap='6px';
+    const maxLbl = document.createElement('label'); maxLbl.textContent = 'max';
+    maxLbl.style.cssText = 'font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)';
+    maxWrap.appendChild(maxLbl);
+    maxWrap.appendChild(makeNumberInput(nsp.shiftMax[s], 1, nsp.nurses, val=>{
+      nsp.shiftMax[s] = Math.max(val, nsp.shiftMin[s]);
+      if(running) stopRun(); resetTelemetry();
+    }));
+
+    v.appendChild(minWrap); v.appendChild(maxWrap);
+    row.appendChild(v);
+    shifts.appendChild(row);
+  }
+}
+
+// Presets
+document.querySelectorAll('[data-preset]').forEach(btn=>{
+  btn.onclick = ()=>{
+    const k = btn.dataset.preset;
+    const lo = Math.max(1, Math.floor(nsp.nurses/6));
+    const mid = Math.max(1, Math.floor(nsp.nurses/4));
+    const hi = Math.max(2, Math.floor(nsp.nurses/2));
+    if(k==='quiet'){
+      nsp.shiftMin = Array(nsp.shiftsPerDay).fill(lo);
+      nsp.shiftMax = Array(nsp.shiftsPerDay).fill(mid);
+    } else if(k==='balanced'){
+      nsp.shiftMin = Array(nsp.shiftsPerDay).fill(mid);
+      nsp.shiftMax = Array(nsp.shiftsPerDay).fill(hi);
+    } else if(k==='busy'){
+      nsp.shiftMin = Array(nsp.shiftsPerDay).fill(Math.max(2, mid+1));
+      nsp.shiftMax = Array(nsp.shiftsPerDay).fill(Math.max(3, hi+1));
+    } else if(k==='strict'){
+      nsp.hardPenalty = 30;
+    }
+    renderConstraintsEditor();
+    if(running) stopRun();
+    resetTelemetry();
+  };
+});
+
+/* (cube click-to-toggle removed — edit requests in the inline table on the left) */
+
+/* ========================================================================
+   Cost chart (2D canvas)
+   ======================================================================== */
+const chartCv = document.getElementById('chart');
+const chartCtx = chartCv.getContext('2d');
+function sizeChart(){
+  const r = chartCv.getBoundingClientRect();
+  chartCv.width = r.width * devicePixelRatio;
+  chartCv.height = r.height * devicePixelRatio;
+  chartCtx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  drawChart();
+}
+addEventListener('resize', sizeChart);
+sizeChart();
+
+function drawChart(){
+  const w = chartCv.clientWidth, h = chartCv.clientHeight;
+  chartCtx.clearRect(0,0,w,h);
+  // grid
+  chartCtx.strokeStyle = 'rgba(255,255,255,.06)';
+  chartCtx.lineWidth = 1;
+  for(let i=1;i<5;i++){
+    const y = (h/5)*i;
+    chartCtx.beginPath(); chartCtx.moveTo(0,y); chartCtx.lineTo(w,y); chartCtx.stroke();
+  }
+  if(costHistory.length<2){
+    chartCtx.fillStyle = 'rgba(154,164,204,.5)';
+    chartCtx.font = '11px Inter, sans-serif';
+    chartCtx.fillText('Run an algorithm to plot the cost trajectory.', 12, h/2);
+    return;
+  }
+  const mn = Math.min(...costHistory), mx = Math.max(...costHistory);
+  const range = mx - mn || 1;
+  const N = costHistory.length;
+  // area fill
+  const grad = chartCtx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0,'rgba(92,246,255,.40)');
+  grad.addColorStop(1,'rgba(92,246,255,0.0)');
+  chartCtx.fillStyle = grad;
+  chartCtx.beginPath();
+  chartCtx.moveTo(0, h);
+  for(let i=0;i<N;i++){
+    const x = (i/(N-1))*w;
+    const y = h - ((costHistory[i]-mn)/range)*(h-16) - 8;
+    if(i===0) chartCtx.lineTo(x,y); else chartCtx.lineTo(x,y);
+  }
+  chartCtx.lineTo(w,h);
+  chartCtx.closePath();
+  chartCtx.fill();
+  // line
+  chartCtx.strokeStyle = '#5cf6ff';
+  chartCtx.lineWidth = 1.6;
+  chartCtx.shadowColor = 'rgba(92,246,255,.6)';
+  chartCtx.shadowBlur = 10;
+  chartCtx.beginPath();
+  for(let i=0;i<N;i++){
+    const x = (i/(N-1))*w;
+    const y = h - ((costHistory[i]-mn)/range)*(h-16) - 8;
+    i===0?chartCtx.moveTo(x,y):chartCtx.lineTo(x,y);
+  }
+  chartCtx.stroke();
+  chartCtx.shadowBlur = 0;
+  // last point marker
+  const lx = w, ly = h - ((costHistory[N-1]-mn)/range)*(h-16) - 8;
+  chartCtx.fillStyle = '#b58bff';
+  chartCtx.beginPath(); chartCtx.arc(lx-4, ly, 3.4, 0, Math.PI*2); chartCtx.fill();
+}
+
+/* ========================================================================
+   Animation loop
+   ======================================================================== */
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 1/30);
+  const now = performance.now();
+  // When the viz window is closed, skip all 3D work entirely
+  if(!vizOpen) return;
+
+  // trajectory marker pulsing
+  if(currentMarker.visible){
+    const p = 1 + Math.sin(now*0.006)*0.18;
+    currentMarker.scale.setScalar(p);
+    currentHalo.scale.setScalar(1 + (Math.sin(now*0.003)*0.35 + 0.5));
+    currentHalo.material.opacity = 0.28 + 0.28*Math.abs(Math.sin(now*0.003));
+  }
+  if(bestMarker.visible){
+    bestMarker.rotation.y += dt*1.2;
+    bestMarker.rotation.x += dt*0.6;
+  }
+
+  // auto-rotate camera when idle
+  if(autoRotate && !controls.isDragging){
+    const a = dt*0.12;
+    const tx = controls.target.x, tz = controls.target.z;
+    const dx = camera.position.x - tx, dz = camera.position.z - tz;
+    const nx = dx*Math.cos(a) - dz*Math.sin(a);
+    const nz = dx*Math.sin(a) + dz*Math.cos(a);
+    camera.position.x = tx + nx;
+    camera.position.z = tz + nz;
+  }
+
+  // particle drift
+  particles.rotation.y += dt*0.02;
+
+  // rim lights breath
+  rimA.intensity = 1.1 + Math.sin(now*0.0012)*0.25;
+  rimB.intensity = 1.0 + Math.cos(now*0.0015)*0.25;
+
+  controls.update();
+  updateHover();
+  composer.render();
+}
+
+addEventListener('resize', ()=>{
+  if(vizOpen) resizeVizCanvas();
+  sizeChart();
+});
+
+// Bootstrap
+buildNSP();
+animate();
+</script>
+</body>
+</html>
