@@ -68,8 +68,16 @@
   .chip.idle .dot{background:var(--ink-dim);box-shadow:none}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
-  /* problem board — fills the main content area */
-  .problem-board{flex:1;padding:22px;display:flex;flex-direction:column;gap:16px;overflow:auto;min-height:0}
+  /* problem board — fills the main content area, laid out as sidebar + main */
+  .problem-board{flex:1;padding:22px;display:flex;flex-direction:row;gap:20px;overflow:hidden;min-height:0;min-width:0}
+  .problem-sidebar{flex:0 0 220px;display:flex;flex-direction:column;gap:14px;overflow:auto;padding-right:4px}
+  .problem-sidebar .params-grid{grid-template-columns:1fr;gap:10px}
+  .problem-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:16px;overflow:auto}
+  @media (max-width: 1000px){
+    .problem-board{flex-direction:column;overflow:auto}
+    .problem-sidebar{flex:0 0 auto;overflow:visible;padding-right:0}
+    .problem-sidebar .params-grid{grid-template-columns:repeat(2,1fr)}
+  }
   /* viz side panel — inside the popup, flex child of .viz-body */
   .viz-side{width:340px;padding:18px;display:flex;flex-direction:column;gap:14px;overflow:auto;
     border-left:1px solid var(--line);background:linear-gradient(180deg,rgba(16,20,38,.35),rgba(16,20,38,.55))}
@@ -281,9 +289,12 @@
   .modal-foot .right{display:flex;gap:8px}
   .modal-foot button{flex:none;padding:10px 16px}
 
-  .nurse-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:4px 0 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .nurse-tabs{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;padding:4px 0 8px;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .nurse-tabs::-webkit-scrollbar{height:5px}
+  .nurse-tabs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:999px}
   .nurse-tab{padding:6px 12px;border-radius:999px;border:1px solid var(--line);font-size:11px;cursor:pointer;
-    background:rgba(255,255,255,.03);color:var(--ink-dim);display:inline-flex;align-items:center;gap:6px;transition:.15s}
+    background:rgba(255,255,255,.03);color:var(--ink-dim);display:inline-flex;align-items:center;gap:6px;transition:.15s;
+    white-space:nowrap;flex:none}
   .nurse-tab:hover{background:rgba(255,255,255,.07);color:var(--ink)}
   .nurse-tab.active{background:linear-gradient(135deg,var(--cyan),var(--violet));color:#07111a;border-color:transparent;font-weight:600;
     box-shadow:0 4px 14px rgba(92,246,255,.25)}
@@ -373,56 +384,61 @@
     </div>
   </header>
 
-  <!-- Main: problem board -->
+  <!-- Main: problem board = sidebar (problem size) + main area (nurse table) -->
   <main class="glass problem-board">
-    <div class="section-label">Problem size</div>
-    <div class="params-grid">
-      <div>
-        <div class="slider-row"><label>Nurses</label><output id="oNurses">8</output></div>
-        <input type="range" id="rNurses" min="3" max="14" value="8" step="1" />
+    <aside class="problem-sidebar">
+      <div class="section-label">Problem size</div>
+      <div class="params-grid">
+        <div>
+          <div class="slider-row"><label>Nurses</label><output id="oNurses">8</output></div>
+          <input type="range" id="rNurses" min="3" max="14" value="8" step="1" />
+        </div>
+        <div>
+          <div class="slider-row"><label>Days</label><output id="oDays">7</output></div>
+          <input type="range" id="rDays" min="3" max="7" value="7" step="1" />
+        </div>
+        <div>
+          <div class="slider-row"><label>Shifts / day</label><output id="oShifts">3</output></div>
+          <input type="range" id="rShifts" min="2" max="4" value="3" step="1" />
+        </div>
+        <div>
+          <div class="slider-row"><label>Max / week</label><output id="oMax">5</output></div>
+          <input type="range" id="rMax" min="2" max="7" value="5" step="1" />
+        </div>
       </div>
-      <div>
-        <div class="slider-row"><label>Days</label><output id="oDays">7</output></div>
-        <input type="range" id="rDays" min="3" max="7" value="7" step="1" />
-      </div>
-      <div>
-        <div class="slider-row"><label>Shifts / day</label><output id="oShifts">3</output></div>
-        <input type="range" id="rShifts" min="2" max="4" value="3" step="1" />
-      </div>
-      <div>
-        <div class="slider-row"><label>Max / week</label><output id="oMax">5</output></div>
-        <input type="range" id="rMax" min="2" max="7" value="5" step="1" />
-      </div>
-    </div>
 
-    <div class="editor-grid">
-      <div class="editor-col">
-        <div class="inline-head">
+      <div class="section-label" style="margin-top:6px">Requests</div>
+      <div class="btn-row" style="display:flex;flex-direction:column;gap:8px">
+        <button class="ghost" id="inlineReqRandom">Randomize</button>
+        <button class="ghost" id="inlineReqClear">Clear</button>
+      </div>
+
+      <div class="section-label" style="margin-top:6px">Actions</div>
+      <div class="btn-row" style="display:flex;flex-direction:column;gap:8px">
+        <button class="primary" id="btnEdit">Hard Constraints</button>
+        <button id="btnReset">Reset</button>
+      </div>
+    </aside>
+
+    <div class="problem-main">
+      <div class="editor-grid">
+        <div class="editor-col">
           <div class="section-label">Nurse Requests</div>
-          <div class="actions">
-            <button class="ghost" id="inlineReqRandom">Randomize</button>
-            <button class="ghost" id="inlineReqClear">Clear</button>
+          <div class="nurse-tabs" id="inlineNurseTabs"></div>
+          <div class="rename-row" id="renameRow" style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);flex:none">Rename</label>
+            <input type="text" id="nurseRenameInput" placeholder="Nurse 1"
+              style="all:unset;flex:1;font-size:13px;color:var(--ink);padding:8px 12px;border-radius:8px;background:rgba(0,0,0,.25);border:1px solid var(--line)" />
           </div>
+          <div id="inlineReqGrid"></div>
+          <div id="inlineResultChip" style="display:none"></div>
         </div>
-        <div class="nurse-tabs" id="inlineNurseTabs"></div>
-        <div class="rename-row" id="renameRow" style="display:flex;gap:8px;align-items:center">
-          <label style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);flex:none">Rename</label>
-          <input type="text" id="nurseRenameInput" placeholder="Nurse 1"
-            style="all:unset;flex:1;font-size:13px;color:var(--ink);padding:8px 12px;border-radius:8px;background:rgba(0,0,0,.25);border:1px solid var(--line)" />
+
+        <div class="editor-col">
+          <div class="section-label">Schedule · by shift</div>
+          <div id="shiftResultWrap" class="shift-result"></div>
         </div>
-        <div id="inlineReqGrid"></div>
-        <div id="inlineResultChip" style="display:none"></div>
       </div>
-
-      <div class="editor-col">
-        <div class="section-label">Schedule · by shift</div>
-        <div id="shiftResultWrap" class="shift-result"></div>
-      </div>
-    </div>
-
-    <div class="btn-row" style="display:flex;gap:8px">
-      <button class="primary" id="btnEdit" style="flex:0 0 auto">Hard Constraints</button>
-      <button id="btnReset" style="flex:0 0 auto">Reset</button>
     </div>
   </main>
 
