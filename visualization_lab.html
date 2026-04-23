@@ -170,6 +170,36 @@
     animation:spin 4s linear infinite;opacity:.85}
   @keyframes spin{to{transform:rotate(360deg)}}
 
+  /* per-card ℹ action button (top-right of each algo card) */
+  .algo-card .card-actions{position:absolute;top:8px;right:8px;display:flex;gap:4px;opacity:.75;transition:opacity .15s}
+  .algo-card:hover .card-actions{opacity:1}
+  .algo-card .card-actions button{all:unset;cursor:pointer;width:22px;height:22px;display:grid;place-items:center;
+    font-size:12px;color:var(--ink);background:rgba(0,0,0,.28);border:1px solid var(--line);border-radius:6px;
+    letter-spacing:0;text-transform:none;font-weight:700;transition:.12s}
+  .algo-card .card-actions button:hover{background:rgba(92,246,255,.18);border-color:rgba(92,246,255,.45);color:var(--cyan)}
+  .algo-card.active .card-actions button{background:rgba(7,17,26,.25);color:#07111a;border-color:rgba(7,17,26,.18)}
+  .algo-card.active .card-actions button:hover{background:rgba(7,17,26,.45);color:#07111a}
+
+  /* info / code modal */
+  #algoInfoModal .modal{width:min(1000px, 96vw);max-height:86vh}
+  #algoInfoModal .modal-body{padding:18px 22px}
+  #algoInfoText{font-size:13px;line-height:1.55;color:var(--ink);white-space:pre-wrap}
+  #algoInfoText h3{margin:0 0 8px;font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-dim)}
+  #algoInfoCode{margin:0;padding:14px 16px;border-radius:10px;background:#0b0e1c;border:1px solid var(--line);
+    color:#dbe1ff;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    font-size:12.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;tab-size:4;overflow:visible;
+    background-image:linear-gradient(180deg, rgba(92,246,255,.03), rgba(181,139,255,.02))}
+  /* VS-Code-inspired Dark+ palette */
+  #algoInfoCode .py-kw     {color:#c586c0;font-weight:600}   /* def/for/if/import */
+  #algoInfoCode .py-bi     {color:#4ec9b0}                    /* built-ins (range, len…) */
+  #algoInfoCode .py-const  {color:#569cd6;font-weight:600}   /* True/False/None/self */
+  #algoInfoCode .py-str    {color:#ce9178}
+  #algoInfoCode .py-com    {color:#6a9955;font-style:italic}
+  #algoInfoCode .py-num    {color:#b5cea8}
+  #algoInfoCode .py-fn     {color:#dcdcaa}                    /* callsite / def name */
+  #algoInfoCode .py-dec    {color:#dcdcaa;font-style:italic}
+  #algoInfoCode .py-op     {color:#d4d4d4}
+
   .algo-bar .action-col{display:flex;flex-direction:column;gap:6px;align-items:stretch;justify-content:stretch;min-width:130px}
   .algo-bar .action-col .mini-btn{padding:8px 10px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;text-align:center;
     border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.04);color:var(--ink);cursor:pointer;transition:.15s;font-weight:600;flex:1;display:grid;place-items:center}
@@ -391,7 +421,7 @@
       <div class="params-grid">
         <div>
           <div class="slider-row"><label>Nurses</label><output id="oNurses">8</output></div>
-          <input type="range" id="rNurses" min="3" max="14" value="8" step="1" />
+          <input type="range" id="rNurses" min="3" max="60" value="8" step="1" />
         </div>
         <div>
           <div class="slider-row"><label>Days</label><output id="oDays">7</output></div>
@@ -399,11 +429,11 @@
         </div>
         <div>
           <div class="slider-row"><label>Shifts / day</label><output id="oShifts">3</output></div>
-          <input type="range" id="rShifts" min="2" max="4" value="3" step="1" />
+          <input type="range" id="rShifts" min="1" max="8" value="3" step="1" />
         </div>
         <div>
           <div class="slider-row"><label>Max / week</label><output id="oMax">5</output></div>
-          <input type="range" id="rMax" min="2" max="7" value="5" step="1" />
+          <input type="range" id="rMax" min="1" max="21" value="5" step="1" />
         </div>
       </div>
 
@@ -558,6 +588,404 @@
     </div>
   </div>
 </div>
+
+<!-- Algorithm info / code viewer modal -->
+<div class="modal-back" id="algoInfoModal">
+  <div class="modal glass">
+    <div class="modal-head">
+      <div>
+        <h2 id="algoInfoTitle">Algorithm</h2>
+        <p id="algoInfoSubtitle">Overview & Python source from OptimizationGui/</p>
+      </div>
+      <button class="modal-close" id="algoInfoClose" title="Close">×</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="tab active" data-tab="about">About</button>
+      <button class="tab" data-tab="code">Python code</button>
+    </div>
+    <div class="modal-body">
+      <div class="tab-pane active" data-tab="about">
+        <div id="algoInfoText"></div>
+      </div>
+      <div class="tab-pane" data-tab="code">
+        <pre id="algoInfoCode"></pre>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="left">
+        <span id="algoInfoFile" style="color:var(--ink-dim);font-size:11px;font-family:ui-monospace,monospace"></span>
+      </div>
+      <div class="right">
+        <button class="ghost" id="algoInfoCopy">Copy code</button>
+        <button class="primary" id="algoInfoCloseBtn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Embedded Python source for each algorithm (read verbatim from OptimizationGui/) -->
+<script type="text/plain" id="pysrc_maxShift">from ortools.linear_solver import pywraplp
+import DataToSend as dt
+
+def main(num_nurses, shift_requests, num_days, num_shifts, max_shift):
+    all_nurses = range(num_nurses)
+    all_days = range(num_days)
+    all_shifts = range(num_shifts)
+
+    solver = pywraplp.Solver.CreateSolver('SCIP')
+    nurse_list = shift_requests
+    prob_list = []
+    # make an input for the problem
+    for k in all_nurses:
+        line = []
+        for i in all_days:
+            column = []
+            for j in all_shifts:
+                column.append(solver.IntVar(0, 1, ''))
+            line.append(column)
+        prob_list.append(line)
+
+    # any nurse can do only one shift a day
+    for nurse in all_nurses:
+        for i in all_days:
+            solver.Add(solver.Sum([prob_list[nurse][i][j] for j in all_shifts]) &lt;= 1)
+
+    # each shift has to have at least 2 nurses
+    for days in all_days:
+        for hour in all_shifts:
+            solver.Add(
+                solver.Sum([prob_list[nurse][days][hour] for nurse in all_nurses]) &gt;= 2)
+
+    # each shift has to have at most 6 nurses
+    for days in all_days:
+        for hour in all_shifts:
+            solver.Add(
+                solver.Sum([prob_list[nurse][days][hour] for nurse in all_nurses]) &lt;= 6)
+
+    # insert the nurse constraints
+    for nurse in all_nurses:
+        # Each nurse works at most num of shifts she can do
+        solver.Add(solver.Sum(prob_list[nurse][d][s] for d in all_days for s in all_shifts) &lt;= max_shift[nurse])
+        for day in all_days:
+            for shift in all_shifts:
+                if nurse_list[nurse][day][shift] == 1:  # if the nurse cant take the shift
+                    solver.Add(prob_list[nurse][day][shift] == 0)  # make it a constraint
+
+    # Each nurse don't works two shifts in consecutive
+    for n in all_nurses:
+        for d in all_days:
+            next = d + 1
+            if next &lt;= num_days - 1:
+                solver.Add(prob_list[n][d][2] + prob_list[n][next][0] &lt;= 1)
+
+    # now define the objective
+    objective = []
+    for nurse in all_nurses:
+        nurse_shift = 0
+        for days in all_days:
+            for hour in all_shifts:
+                nurse_shift += prob_list[nurse][days][hour]  # sum all the shifts the nurse take
+        objective.append(nurse_shift)
+
+    # we want to maximize the sum of shifts of the nurses
+    solver.Maximize(solver.Sum(objective))
+
+    # Solve
+    status = solver.Solve()
+
+    result = []
+    if status == pywraplp.Solver.OPTIMAL or status == pywraplp.Solver.FEASIBLE:
+        for d in all_days:
+            result.append("Day " + str(d + 1))
+            for n in all_nurses:
+                for s in all_shifts:
+                    if prob_list[n][d][s].solution_value() &gt; 0.5:
+                        if shift_requests[n][d][s] == 1:
+                            result.append('Nurse ' + str(n) + ' works shift ' + str(s) + ' (not requested)')
+                        else:
+                            result.append('Nurse ' + str(n) + ' works shift ' + str(s))
+    else:
+        result.append("there is no solution!")
+    return result
+</script>
+
+<script type="text/plain" id="pysrc_csp">from ortools.sat.python import cp_model
+import DataToSend as dt
+
+# This program tries to find an optimal assignment of nurses to shifts
+# (3 shifts per day, for 7 days), subject to some constraints (see below).
+# Each nurse can request to be assigned to specific shifts.
+# The optimal assignment maximizes the number of fulfilled shift requests.
+def main(num_nurses, shift_requests, num_days, num_shifts, num_shift):
+    all_nurses = range(num_nurses)
+    all_days = range(num_days)
+    all_shifts = range(num_shifts)
+
+    # Creates the model.
+    model = cp_model.CpModel()
+
+    # Creates shift variables.
+    # shifts[(n, d, s)]: nurse 'n' works shift 's' on day 'd'.
+    shifts = {}
+    for n in all_nurses:
+        for d in all_days:
+            for s in all_shifts:
+                shifts[(n, d, s)] = model.NewBoolVar('shift_n%id%is%i' % (n, d, s))
+
+    # Each shift is assigned to at least two nurses in shift.
+    for d in all_days:
+        for s in all_shifts:
+            model.Add(sum(shifts[(n, d, s)] for n in all_nurses) &gt;= 2)
+
+    # Each shift is assigned to at most six nurses in shift.
+    for d in all_days:
+        for s in all_shifts:
+            model.Add(sum(shifts[(n, d, s)] for n in all_nurses) &lt;= 6)
+
+    # Each nurse works at most one shift per day.
+    for n in all_nurses:
+        for d in all_days:
+            model.Add(sum(shifts[(n, d, s)] for s in all_shifts) &lt;= 1)
+
+    # Each nurse don't works two shifts in consecutive
+    for n in all_nurses:
+        for d in all_days:
+            next = d + 1
+            if next &lt;= num_days - 1:
+                model.Add(shifts[(n, d, 2)] + shifts[(n, next, 0)] &lt; 2)
+
+    # Each nurse works at exactly num of shifts he needs
+    for n in all_nurses:
+        model.Add(sum(shifts[(n, d, s)] for d in all_days for s in all_shifts) == num_shift[n])
+
+    # insert the nurse constraints (declined shift becomes a hard ==0)
+    for nurse in all_nurses:
+        for day in all_days:
+            for shift in all_shifts:
+                if shift_requests[nurse][day][shift] == 1:
+                    model.Add(shifts[(nurse, day, shift)] == 0)
+
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model)
+    # returns any feasible assignment or reports infeasibility
+    return status
+</script>
+
+<script type="text/plain" id="pysrc_cspMin">from ortools.sat.python import cp_model
+import DataToSend as dt
+
+# Same CP-SAT base model as csp.py, but adds an objective:
+#   minimise the number of shifts assigned against a nurse's requests.
+def main(num_nurses, shift_requests, num_days, num_shifts, num_shift):
+    all_nurses = range(num_nurses)
+    all_days = range(num_days)
+    all_shifts = range(num_shifts)
+
+    model = cp_model.CpModel()
+    shifts = {}
+    for n in all_nurses:
+        for d in all_days:
+            for s in all_shifts:
+                shifts[(n, d, s)] = model.NewBoolVar('shift_n%id%is%i' % (n, d, s))
+
+    for d in all_days:
+        for s in all_shifts:
+            model.Add(sum(shifts[(n, d, s)] for n in all_nurses) &gt;= 2)
+            model.Add(sum(shifts[(n, d, s)] for n in all_nurses) &lt;= 6)
+
+    for n in all_nurses:
+        for d in all_days:
+            model.Add(sum(shifts[(n, d, s)] for s in all_shifts) &lt;= 1)
+
+    for n in all_nurses:
+        for d in all_days:
+            next = d + 1
+            if next &lt;= num_days - 1:
+                model.Add(shifts[(n, d, 2)] + shifts[(n, next, 0)] &lt; 2)
+
+    for n in all_nurses:
+        model.Add(sum(shifts[(n, d, s)] for d in all_days for s in all_shifts) == num_shift[n])
+
+    # OBJECTIVE: minimise shifts assigned to nurses who did NOT want them.
+    model.Minimize(
+        sum(shift_requests[n][d][s] * shifts[(n, d, s)] for n in all_nurses
+            for d in all_days for s in all_shifts))
+
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model)
+    return status
+</script>
+
+<script type="text/plain" id="pysrc_hillClimb">from nurse_class import NurseSchedulingProblem
+import random
+
+HARD_CONSTRAINT_PENALTY = 10  # the penalty factor for a hard-constraint violation
+
+def get_neighbors(current_shifts):
+    neighbors = []
+    length = len(current_shifts)
+    for i in range(length):
+        temp_shifts = current_shifts[0:length]
+        temp_shifts[i] = 0 if temp_shifts[i] == 1 else 1
+        neighbors.append(temp_shifts)
+    return neighbors
+
+def main(nurse, shift_requests, num_days, num_shifts, num_shift):
+    nsp = NurseSchedulingProblem(HARD_CONSTRAINT_PENALTY, nurse, shift_requests,
+                                 num_days, num_shifts, num_shift)
+    # start = the inverse of the preferences vector
+    current_state = invert(flatten(shift_requests, nurse, num_days, num_shifts))
+    while True:
+        neighbors = get_neighbors(current_state)
+        next_eval = float('inf'); next_node = None
+        for neighbor in neighbors:
+            c = nsp.getCost(neighbor)
+            if c &lt; next_eval:
+                next_eval = c; next_node = neighbor
+        if next_eval &gt;= nsp.getCost(current_state):
+            break  # local minimum -- stop
+        current_state = next_node
+    return nsp.printScheduleInfo(current_state)
+</script>
+
+<script type="text/plain" id="pysrc_hillRestart">from nurse_class import NurseSchedulingProblem
+import random
+
+HARD_CONSTRAINT_PENALTY = 10
+
+def generate_random_start(nurse_num, num_days, num_shifts):
+    length = nurse_num * num_days * num_shifts
+    return [random.randint(0, 1) for _ in range(length)]
+
+def get_neighbors(state):
+    result = []
+    for i in range(len(state)):
+        t = state[:]
+        t[i] = 0 if t[i] == 1 else 1
+        result.append(t)
+    return result
+
+def main(nurse, shift_requests, num_days, num_shifts, num_shift, num_of_new_starts):
+    nsp = NurseSchedulingProblem(HARD_CONSTRAINT_PENALTY, nurse, shift_requests,
+                                 num_days, num_shifts, num_shift)
+    current_state = invert(flatten(shift_requests, nurse, num_days, num_shifts))
+    highest_scores = []
+    while num_of_new_starts &gt; 0:
+        neighbors = get_neighbors(current_state)
+        next_eval = float('inf'); next_node = None
+        for neighbor in neighbors:
+            c = nsp.getCost(neighbor)
+            if c &lt; next_eval:
+                next_eval = c; next_node = neighbor
+        if next_eval &gt;= nsp.getCost(current_state):
+            highest_scores.append(current_state)
+            num_of_new_starts -= 1
+            current_state = generate_random_start(nurse, num_days, num_shifts)
+        else:
+            current_state = next_node
+    # keep the best of all local minima found
+    return nsp.printScheduleInfo(min(highest_scores, key=nsp.getCost))
+</script>
+
+<script type="text/plain" id="pysrc_sa">from nurse_class import NurseSchedulingProblem
+import numpy as np, random
+import scipy.constants as constants
+
+HARD_CONSTRAINT_PENALTY = 10
+D = 100
+
+def temperature(t):  return pow(0.9, t) * D
+def prob_func(T, d_e): return np.exp(d_e / T * constants.Boltzmann)
+
+def random_neighbor(state):
+    i = random.randint(0, len(state) - 1)
+    t = state[:]; t[i] = 0 if t[i] == 1 else 1
+    return t
+
+def main(nurse, shift_requests, num_days, num_shifts, num_shift, num_moves):
+    nsp = NurseSchedulingProblem(HARD_CONSTRAINT_PENALTY, nurse, shift_requests,
+                                 num_days, num_shifts, num_shift)
+    current_state = invert(flatten(shift_requests, nurse, num_days, num_shifts))
+    current_cost = nsp.getCost(current_state)
+    for counter in range(num_moves):
+        neighbor = random_neighbor(current_state)
+        neighbor_cost = nsp.getCost(neighbor)
+        if neighbor_cost &lt; current_cost:
+            current_state = neighbor
+            current_cost = neighbor_cost
+        else:
+            T = temperature(counter + 1)
+            if T == 0:
+                break
+            d_E = current_cost - neighbor_cost
+            prob = prob_func(T, d_E)
+            if prob &gt;= np.random.uniform(0, 1):
+                current_state = neighbor
+                current_cost = neighbor_cost
+    return nsp.printScheduleInfo(current_state)
+</script>
+
+<script type="text/plain" id="pysrc_genetic">from deap import base, creator, tools, algorithms
+import random, numpy as np
+import nurse_class
+
+HARD_CONSTRAINT_PENALTY = 10
+POPULATION_SIZE = 300
+P_CROSSOVER = 0.9
+P_MUTATION = 0.1
+MAX_GENERATIONS = 200
+HALL_OF_FAME_SIZE = 30
+RANDOM_SEED = 42
+random.seed(RANDOM_SEED)
+
+toolbox = base.Toolbox()
+creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+creator.create("Individual", list, fitness=creator.FitnessMin)
+
+def eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, stats=None,
+                        halloffame=None, verbose=__debug__):
+    # Like DEAP's eaSimple, but injects halloffame individuals directly into
+    # each generation (elitism).
+    logbook = tools.Logbook()
+    logbook.header = ['gen', 'nevals'] + (stats.fields if stats else [])
+    invalid = [ind for ind in population if not ind.fitness.valid]
+    for ind, fit in zip(invalid, toolbox.map(toolbox.evaluate, invalid)):
+        ind.fitness.values = fit
+    halloffame.update(population)
+    hof_size = len(halloffame.items) if halloffame.items else 0
+    record = stats.compile(population) if stats else {}
+    logbook.record(gen=0, nevals=len(invalid), **record)
+    for gen in range(1, ngen + 1):
+        offspring = toolbox.select(population, len(population) - hof_size)
+        offspring = algorithms.varAnd(offspring, toolbox, cxpb, mutpb)
+        invalid = [ind for ind in offspring if not ind.fitness.valid]
+        for ind, fit in zip(invalid, toolbox.map(toolbox.evaluate, invalid)):
+            ind.fitness.values = fit
+        offspring.extend(halloffame.items)
+        halloffame.update(offspring)
+        population[:] = offspring
+    return population, logbook
+
+def main(nurse, shift_requests, num_days, num_shifts, num_shift, gen):
+    nsp = nurse_class.NurseSchedulingProblem(HARD_CONSTRAINT_PENALTY, nurse,
+            shift_requests, num_days, num_shifts, num_shift)
+    toolbox.register("zeroOrOne", random.randint, 0, 1)
+    toolbox.register("individualCreator", tools.initRepeat,
+                     creator.Individual, toolbox.zeroOrOne, len(nsp))
+    toolbox.register("populationCreator", tools.initRepeat,
+                     list, toolbox.individualCreator)
+    toolbox.register("evaluate", lambda ind: (nsp.getCost(ind),))
+    toolbox.register("select", tools.selTournament, tournsize=2)
+    toolbox.register("mate", tools.cxTwoPoint)
+    toolbox.register("mutate", tools.mutFlipBit, indpb=1.0 / len(nsp))
+    population = toolbox.populationCreator(n=POPULATION_SIZE)
+    stats = tools.Statistics(lambda ind: ind.fitness.values)
+    stats.register("min", np.min); stats.register("avg", np.mean)
+    hof = tools.HallOfFame(HALL_OF_FAME_SIZE)
+    eaSimpleWithElitism(population, toolbox, cxpb=P_CROSSOVER, mutpb=P_MUTATION,
+                        ngen=gen, stats=stats, halloffame=hof, verbose=True)
+    return nsp.printScheduleInfo(hof.items[0])
+</script>
 
 <!-- Three.js via importmap -->
 <script type="importmap">
@@ -1384,7 +1812,23 @@ let autoRotate = false;
 let runToken = 0;
 
 function makePreferences(nurses, days, shiftsPerDay){
-  // ~35% chance any slot is marked "requested off"
+  // Default: every slot is "no constraint" (0). Use the Randomize button
+  // in the sidebar to populate pseudo-random requested-off slots on demand.
+  const p = [];
+  for(let n=0;n<nurses;n++){
+    const nd = [];
+    for(let d=0;d<days;d++){
+      const ns = [];
+      for(let s=0;s<shiftsPerDay;s++) ns.push(0);
+      nd.push(ns);
+    }
+    p.push(nd);
+  }
+  return p;
+}
+
+// Optional helper kept so the Randomize button can still scatter requests.
+function randomizePreferences(nurses, days, shiftsPerDay){
   const p = [];
   for(let n=0;n<nurses;n++){
     const nd = [];
@@ -1450,10 +1894,15 @@ ALGO_META.forEach((a,i)=>{
   el.className = 'algo-card';
   el.dataset.id = a.id;
   el.innerHTML = `
+    <div class="card-actions">
+      <button class="info-btn" title="About & Python source" aria-label="Info">ⓘ</button>
+    </div>
     <div class="idx"><span class="n">${i+1}</span>${a.tag}</div>
     <div class="name">${a.name}</div>
     <div class="tag">Click to run</div>`;
-  el.onclick = ()=>{
+  el.onclick = (evt)=>{
+    // clicks on the per-card ℹ button are handled separately
+    if(evt.target.closest('.card-actions')) return;
     if(running) stopRun();
     currentAlgo = a.id;
     document.querySelectorAll('.algo-card').forEach(x=>x.classList.remove('active'));
@@ -1462,11 +1911,305 @@ ALGO_META.forEach((a,i)=>{
     openViz(a);
     startRun();
   };
+  el.querySelector('.info-btn').addEventListener('click', (evt)=>{
+    evt.stopPropagation();
+    openAlgoInfo(a, 'about');
+  });
   algoCards[a.id] = el;
   algoScroller.appendChild(el);
 });
 algoCards[currentAlgo].classList.add('active');
 document.getElementById('chipAlgo').textContent = ALGO_META.find(a=>a.id===currentAlgo).name;
+
+/* ========================================================================
+   Algorithm info / source-code modal
+   ======================================================================== */
+const ALGO_INFO = {
+  maxShift: {
+    file: 'OptimizationGui/MaxShifts.py',
+    about:
+`Maximize Shifts — Mixed-Integer Linear Programming
+
+Formulates the schedule as a MIP using Google OR-Tools (SCIP backend).
+Every (nurse, day, shift) slot is a 0/1 variable.
+
+Hard constraints:
+  • At most one shift per nurse per day
+  • At least 2 and at most 6 nurses on each shift
+  • No evening-then-morning consecutive pair
+  • Each nurse works ≤ her configured weekly quota
+  • Declined shifts (request==1) forced to 0
+
+Objective:
+  maximize the total number of shifts actually worked.
+
+Strengths: exact, optimal under the constraints.
+Tradeoff:  solver time grows with problem size; assumes feasibility.`
+  },
+  csp: {
+    file: 'OptimizationGui/csp.py',
+    about:
+`Constraint Satisfaction — OR-Tools CP-SAT
+
+A pure feasibility model using the CP-SAT solver. Same variables
+as Max Shift but no objective — the solver returns any assignment
+that satisfies every hard constraint, or reports UNSAT.
+
+Hard constraints:
+  • 2 ≤ nurses per shift ≤ 6
+  • ≤ 1 shift per nurse per day
+  • no evening→morning pair
+  • each nurse works exactly her required quota
+  • declined shifts are hard-forbidden
+
+Strengths: good search on tight combinatorial problems.
+Tradeoff:  finds 'a' solution, not necessarily the best.`
+  },
+  cspMin: {
+    file: 'OptimizationGui/shift_min.py',
+    about:
+`CSP + Minimise Conflicts — CP-SAT with objective
+
+Same CP-SAT model as 'CSP', but adds an objective:
+    minimise the number of shifts assigned to nurses
+    who did NOT request them.
+
+In practice: honour nurse preferences as much as possible
+while still satisfying every hard constraint.
+
+Strengths: best trade-off when preferences matter.
+Tradeoff:  soft-constraint weighting is implicit.`
+  },
+  hillClimb: {
+    file: 'OptimizationGui/hill_climbing.py',
+    about:
+`Hill Climbing — Deterministic local search
+
+1. Start from the inverse of the preferences vector (a heuristic
+   starting point that already respects as many requests as possible).
+2. Build all single-bit-flip neighbours.
+3. Move to the neighbour with the lowest cost
+   (hard violations ×10 + preference breaks).
+4. Stop when no neighbour improves — a local minimum.
+
+Strengths: fast, simple, deterministic.
+Tradeoff:  gets stuck at local minima; no exploration.`
+  },
+  hillRestart: {
+    file: 'OptimizationGui/new_starts_hill_climbing.py',
+    about:
+`Random-Restart Hill Climbing — Stochastic local search
+
+Runs hill climbing from multiple random starts (the
+'Number of Starts' parameter) and keeps the best local
+minimum found across all restarts.
+
+Strengths: escapes bad local optima; embarrassingly parallel.
+Tradeoff:  cost scales linearly with the number of restarts.`
+  },
+  sa: {
+    file: 'OptimizationGui/simulated_annealing.py',
+    about:
+`Simulated Annealing — Metropolis–Hastings moves
+
+Like hill climbing, but worse neighbours are accepted with
+probability exp(ΔE / (T · k_B)). Temperature cools as
+T = 0.9^t · 100, so exploration dominates early and converges
+later.
+
+Strengths: escapes local minima probabilistically.
+Tradeoff:  sensitive to cooling schedule; stochastic results.`
+  },
+  genetic: {
+    file: 'OptimizationGui/genetic.py',
+    about:
+`Genetic Algorithm — DEAP implementation
+
+A population of 300 candidate schedules evolves over 'Generations':
+  • Selection:  tournament size 2
+  • Crossover:  two-point, p = 0.9
+  • Mutation:   per-bit flip, p = 1 / len(individual)
+  • Elitism:    Hall of Fame size 30 injected every generation
+
+Strengths: strong global search; population diversity.
+Tradeoff:  200+ generations × 300 individuals can be slow.`
+  }
+};
+
+const PY_MAP = {
+  maxShift:    'pysrc_maxShift',
+  csp:         'pysrc_csp',
+  cspMin:      'pysrc_cspMin',
+  hillClimb:   'pysrc_hillClimb',
+  hillRestart: 'pysrc_hillRestart',
+  sa:          'pysrc_sa',
+  genetic:     'pysrc_genetic'
+};
+
+const algoInfoModal   = document.getElementById('algoInfoModal');
+const algoInfoTitle   = document.getElementById('algoInfoTitle');
+const algoInfoSubtitle= document.getElementById('algoInfoSubtitle');
+const algoInfoText    = document.getElementById('algoInfoText');
+const algoInfoCode    = document.getElementById('algoInfoCode');
+const algoInfoFile    = document.getElementById('algoInfoFile');
+
+// Minimal Python syntax highlighter — enough to make the modal feel like an IDE.
+const PY_KEYWORDS = new Set([
+  'and','as','assert','async','await','break','class','continue','def','del',
+  'elif','else','except','finally','for','from','global','if','import','in',
+  'is','lambda','nonlocal','not','or','pass','raise','return','try','while',
+  'with','yield'
+]);
+const PY_CONSTS = new Set(['True','False','None','self','cls']);
+const PY_BUILTINS = new Set([
+  'abs','all','any','bool','dict','enumerate','filter','float','frozenset','int',
+  'len','list','map','max','min','object','open','pow','print','range','repr',
+  'reversed','round','set','sorted','str','sum','tuple','type','zip','isinstance',
+  'hasattr','getattr','setattr','next','iter','input'
+]);
+
+function highlightPython(code){
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const n = code.length;
+  let out = '';
+  let i = 0;
+  let lastSig = '';  // most-recent non-whitespace identifier — lets us detect `def NAME`
+  while(i < n){
+    const ch = code[i];
+
+    // comment
+    if(ch === '#'){
+      let j = i;
+      while(j < n && code[j] !== '\n') j++;
+      out += '<span class="py-com">' + esc(code.slice(i,j)) + '</span>';
+      i = j;
+      continue;
+    }
+
+    // triple-quoted strings (""" or ''')
+    if((ch === '"' || ch === "'") && code.substr(i, 3) === ch.repeat(3)){
+      const q = ch.repeat(3);
+      let j = i + 3;
+      while(j < n && code.substr(j, 3) !== q) j++;
+      const end = Math.min(j + 3, n);
+      out += '<span class="py-str">' + esc(code.slice(i, end)) + '</span>';
+      i = end;
+      continue;
+    }
+
+    // regular strings (handle \\ escapes, stop at newline)
+    if(ch === '"' || ch === "'"){
+      const q = ch;
+      let j = i + 1;
+      while(j < n && code[j] !== q && code[j] !== '\n'){
+        if(code[j] === '\\' && j + 1 < n) j++;
+        j++;
+      }
+      const end = (code[j] === q) ? j + 1 : j;
+      out += '<span class="py-str">' + esc(code.slice(i, end)) + '</span>';
+      i = end;
+      continue;
+    }
+
+    // numeric literals
+    if(/[0-9]/.test(ch)){
+      let j = i;
+      while(j < n && /[0-9._eExXoObB]/.test(code[j])) j++;
+      out += '<span class="py-num">' + esc(code.slice(i,j)) + '</span>';
+      i = j;
+      continue;
+    }
+
+    // decorator line (@foo.bar)
+    if(ch === '@' && /[A-Za-z_]/.test(code[i+1] || '')){
+      let j = i + 1;
+      while(j < n && /[A-Za-z0-9_.]/.test(code[j])) j++;
+      out += '<span class="py-dec">' + esc(code.slice(i, j)) + '</span>';
+      i = j;
+      continue;
+    }
+
+    // identifier or keyword
+    if(/[A-Za-z_]/.test(ch)){
+      let j = i;
+      while(j < n && /[A-Za-z0-9_]/.test(code[j])) j++;
+      const word = code.slice(i, j);
+      let cls = null;
+      if(PY_KEYWORDS.has(word))      cls = 'py-kw';
+      else if(PY_CONSTS.has(word))   cls = 'py-const';
+      else if(PY_BUILTINS.has(word)) cls = 'py-bi';
+      else if(lastSig === 'def' || lastSig === 'class') cls = 'py-fn';
+      else if(code[j] === '(')       cls = 'py-fn';  // call site
+      out += cls
+        ? `<span class="${cls}">${esc(word)}</span>`
+        : esc(word);
+      lastSig = word;
+      i = j;
+      continue;
+    }
+
+    // reset lastSig when we see meaningful non-identifier punctuation
+    if(/\S/.test(ch)) lastSig = '';
+    out += esc(ch);
+    i++;
+  }
+  return out;
+}
+
+function openAlgoInfo(meta, initialTab){
+  const info = ALGO_INFO[meta.id] || {};
+  algoInfoTitle.textContent = meta.name;
+  algoInfoSubtitle.textContent = meta.tag + ' · ' + (info.file || '');
+  algoInfoFile.textContent = info.file || '';
+  algoInfoText.textContent = info.about || 'No description available.';
+
+  const srcEl = document.getElementById(PY_MAP[meta.id]);
+  const raw = srcEl ? srcEl.textContent : '';
+  // the embedded source uses &lt; &gt; entities to avoid HTML parsing issues
+  const decoded = raw
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .trim();
+  algoInfoCode.innerHTML = highlightPython(decoded);
+
+  // switch to the requested tab
+  setAlgoInfoTab(initialTab || 'about');
+  algoInfoModal.classList.add('open');
+}
+
+function closeAlgoInfo(){
+  algoInfoModal.classList.remove('open');
+}
+
+function setAlgoInfoTab(name){
+  algoInfoModal.querySelectorAll('.modal-tabs .tab').forEach(t=>{
+    t.classList.toggle('active', t.dataset.tab === name);
+  });
+  algoInfoModal.querySelectorAll('.tab-pane').forEach(p=>{
+    p.classList.toggle('active', p.dataset.tab === name);
+  });
+}
+
+algoInfoModal.querySelectorAll('.modal-tabs .tab').forEach(t=>{
+  t.addEventListener('click', ()=>setAlgoInfoTab(t.dataset.tab));
+});
+document.getElementById('algoInfoClose').addEventListener('click', closeAlgoInfo);
+document.getElementById('algoInfoCloseBtn').addEventListener('click', closeAlgoInfo);
+algoInfoModal.addEventListener('click', (e)=>{ if(e.target === algoInfoModal) closeAlgoInfo() });
+
+document.getElementById('algoInfoCopy').addEventListener('click', ()=>{
+  // .textContent strips span tags and gives the raw Python source
+  const txt = algoInfoCode.textContent;
+  if(!txt || !navigator.clipboard) return;
+  navigator.clipboard.writeText(txt).then(()=>{
+    const btn = document.getElementById('algoInfoCopy');
+    const prev = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    setTimeout(()=>{ btn.textContent = prev }, 1200);
+  });
+});
+
 document.getElementById('btnStop').addEventListener('click', ()=>stopRun());
 document.getElementById('btnVizClose').addEventListener('click', ()=>closeViz());
 const _clearTrailBtn = document.getElementById('btnClearTrail');
@@ -1565,6 +2308,7 @@ function flyCamera(target, look){
 // Keyboard
 addEventListener('keydown', (e)=>{
   if(e.target.tagName === 'INPUT') return;
+  if(algoInfoModal.classList.contains('open') && e.code === 'Escape'){ closeAlgoInfo(); return }
   if(modalBack.classList.contains('open') && e.code === 'Escape'){ closeEditor(); return }
   if(vizOpen && e.code === 'Escape'){ closeViz(); return }
   if(e.code === 'KeyR') { stopRun(); buildNSP() }
@@ -1801,7 +2545,7 @@ function togglePref(n, d, s){
 }
 
 document.getElementById('inlineReqRandom').onclick = ()=>{
-  nsp.preferences = makePreferences(nsp.nurses, nsp.days, nsp.shiftsPerDay);
+  nsp.preferences = randomizePreferences(nsp.nurses, nsp.days, nsp.shiftsPerDay);
   if(running) stopRun();
   currentSchedule = null;
   resetTelemetry();
