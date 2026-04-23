@@ -350,6 +350,15 @@
   .req-cell{width:100%;height:62px;cursor:pointer;display:grid;place-items:center;transition:.14s;
     position:relative;overflow:hidden}
   .req-cell:hover{background:rgba(255,255,255,.04)}
+
+  /* editable row / column headers — click to rename */
+  .editable-hdr{cursor:text;transition:background .15s}
+  .editable-hdr:hover{background:rgba(92,246,255,.05)}
+  .editable-hdr > [contenteditable]{outline:none;display:inline-block;min-width:28px;padding:2px 4px;border-radius:4px;
+    border-bottom:1px dashed rgba(255,255,255,.12);transition:border-color .15s, background .15s}
+  .editable-hdr > [contenteditable]:hover{border-bottom-color:rgba(92,246,255,.45)}
+  .editable-hdr > [contenteditable]:focus{background:rgba(92,246,255,.08);border-bottom-color:var(--cyan);
+    box-shadow:0 0 0 2px rgba(92,246,255,.15)}
   .req-cell .badge{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim);opacity:.55;font-weight:600}
   .req-cell.off{background:linear-gradient(135deg,rgba(255,108,240,.18),rgba(181,139,255,.12));color:var(--magenta)}
   .req-cell.off .badge{color:var(--magenta);opacity:1;font-weight:600}
@@ -430,10 +439,6 @@
         <div>
           <div class="slider-row"><label>Shifts / day</label><output id="oShifts">3</output></div>
           <input type="range" id="rShifts" min="1" max="8" value="3" step="1" />
-        </div>
-        <div>
-          <div class="slider-row"><label>Max / week</label><output id="oMax">5</output></div>
-          <input type="range" id="rMax" min="1" max="21" value="5" step="1" />
         </div>
       </div>
 
@@ -1009,6 +1014,10 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
    Nurse Scheduling Problem — JS port (mirrors OptimizationGui/nurse_class.py)
    ======================================================================== */
 const SHIFT_NAMES = ['Morning','Evening','Night','Overnight'];
+// Editable labels that persist across problem-size rebuilds.
+// Filled into nsp.dayLabels / nsp.shiftLabels inside buildNSP().
+let currentDayLabels   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let currentShiftLabels = ['Morning','Evening','Night','Overnight','S5','S6','S7','S8'];
 
 class NSP {
   constructor(opts){
@@ -1842,11 +1851,17 @@ function randomizePreferences(nurses, days, shiftsPerDay){
   return p;
 }
 
+// Persistent 'Max / week' cap — edited only via the Hard Constraints modal.
+let currentMaxPerWeek = 5;
+
 function buildNSP(){
   const nurses = +document.getElementById('rNurses').value;
   const days   = +document.getElementById('rDays').value;
   const sPer   = +document.getElementById('rShifts').value;
-  const maxW   = +document.getElementById('rMax').value;
+  // clamp against the current grid so the cap stays feasible
+  const capCeil = days * sPer;
+  const maxW   = Math.max(0, Math.min(currentMaxPerWeek, capCeil));
+  currentMaxPerWeek = maxW;
   const prefs  = makePreferences(nurses, days, sPer);
   nsp = new NSP({
     nurses, days, shiftsPerDay:sPer, maxPerWeek:maxW,
@@ -1856,6 +1871,9 @@ function buildNSP(){
   });
   // Default nurse names (can be renamed inline)
   nsp.nurseNames = Array.from({length:nurses}, (_,i)=>`Nurse ${i+1}`);
+  // Sync editable row/column labels onto the current problem.
+  nsp.dayLabels   = Array.from({length:days}, (_,i)=>currentDayLabels[i]   ?? `Day ${i+1}`);
+  nsp.shiftLabels = Array.from({length:sPer},  (_,i)=>currentShiftLabels[i] ?? `Shift ${i+1}`);
   editorNurse = Math.min(editorNurse, nurses-1);
   currentSchedule = null;
   rebuildLabels(nsp);
@@ -2254,19 +2272,14 @@ if(window.ResizeObserver && canvasWrapEl){
 }
 
 // Parameter bindings
-['rNurses','rDays','rShifts','rMax','rSpeed'].forEach(id=>{
+['rNurses','rDays','rShifts','rSpeed'].forEach(id=>{
   const el = document.getElementById(id);
   const out = document.getElementById('o'+id.slice(1));
   el.addEventListener('input', ()=>{
     out.textContent = id==='rSpeed' ? (+el.value).toFixed(2)+'×' : el.value;
     if(id==='rSpeed') return;
     if(running) stopRun();
-    if(id==='rMax'){
-      // cap change only — keep preferences & grid
-      if(nsp){ nsp.maxPerWeek = +el.value; resetTelemetry(); applySchedule(new Uint8Array(nsp.total)) }
-    } else {
-      buildNSP();
-    }
+    buildNSP();
   });
 });
 
@@ -2408,6 +2421,32 @@ let currentSchedule = null;       // Uint8Array — the schedule currently visua
 function nurseName(n){
   return (nsp.nurseNames && nsp.nurseNames[n]) || `Nurse ${n+1}`;
 }
+function dayLabel(d){
+  return (nsp && nsp.dayLabels && nsp.dayLabels[d]) || (DAY_LABELS[d] ?? `Day ${d+1}`);
+}
+function shiftLabel(s){
+  return (nsp && nsp.shiftLabels && nsp.shiftLabels[s]) || (SHIFT_NAMES[s] ?? `S${s+1}`);
+}
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renameDay(d, raw){
+  const v = String(raw || '').trim();
+  const next = v || `Day ${d+1}`;
+  if(!nsp.dayLabels) nsp.dayLabels = [];
+  nsp.dayLabels[d] = next;
+  currentDayLabels[d] = next;  // persist across rebuilds
+  syncEditorViews();
+}
+function renameShift(s, raw){
+  const v = String(raw || '').trim();
+  const next = v || `Shift ${s+1}`;
+  if(!nsp.shiftLabels) nsp.shiftLabels = [];
+  nsp.shiftLabels[s] = next;
+  currentShiftLabels[s] = next;
+  syncEditorViews();
+}
 
 function renderInlineTabs(){
   const wrap = document.getElementById('inlineNurseTabs');
@@ -2440,10 +2479,11 @@ function isAssigned(n, d, s){
 function renderInlineGrid(){
   const wrap = document.getElementById('inlineReqGrid');
   let html = `<table class="req-grid"><thead><tr><th></th>`;
-  for(let s=0;s<nsp.shiftsPerDay;s++) html += `<th>${SHIFT_NAMES[s] ?? ('S'+(s+1))}</th>`;
+  for(let s=0;s<nsp.shiftsPerDay;s++)
+    html += `<th class="editable-hdr" data-kind="shift" data-i="${s}" title="Click to rename"><span contenteditable="true" spellcheck="false">${escHtml(shiftLabel(s))}</span></th>`;
   html += `</tr></thead><tbody>`;
   for(let d=0;d<nsp.days;d++){
-    html += `<tr><th>${DAY_LABELS[d] ?? ('Day '+(d+1))}</th>`;
+    html += `<tr><th class="editable-hdr" data-kind="day" data-i="${d}" title="Click to rename"><span contenteditable="true" spellcheck="false">${escHtml(dayLabel(d))}</span></th>`;
     for(let s=0;s<nsp.shiftsPerDay;s++){
       const off = nsp.preferences[editorNurse][d][s]===1;
       const asg = isAssigned(editorNurse, d, s);
@@ -2461,6 +2501,7 @@ function renderInlineGrid(){
       togglePref(editorNurse, d, s);
     };
   });
+  wireEditableHeaders(wrap);
   // small status chip showing violations for this nurse
   const chip = document.getElementById('inlineResultChip');
   if(!currentSchedule){ chip.style.display='none'; return }
@@ -2510,10 +2551,11 @@ function renderShiftResultTable(){
     return;
   }
   let html = `<table><thead><tr><th class="day">Day</th>`;
-  for(let s=0;s<nsp.shiftsPerDay;s++) html += `<th>${SHIFT_NAMES[s] ?? ('S'+(s+1))}</th>`;
+  for(let s=0;s<nsp.shiftsPerDay;s++)
+    html += `<th class="editable-hdr" data-kind="shift" data-i="${s}" title="Click to rename"><span contenteditable="true" spellcheck="false">${escHtml(shiftLabel(s))}</span></th>`;
   html += `</tr></thead><tbody>`;
   for(let d=0;d<nsp.days;d++){
-    html += `<tr><td class="day">${DAY_LABELS[d] ?? ('Day '+(d+1))}</td>`;
+    html += `<tr><td class="day editable-hdr" data-kind="day" data-i="${d}" title="Click to rename"><span contenteditable="true" spellcheck="false">${escHtml(dayLabel(d))}</span></td>`;
     for(let s=0;s<nsp.shiftsPerDay;s++){
       const assignedNurses = [];
       for(let n=0;n<nsp.nurses;n++){
@@ -2533,7 +2575,31 @@ function renderShiftResultTable(){
     html += `</tr>`;
   }
   html += `</tbody></table>`;
-  for(const w of wraps) w.innerHTML = html;
+  for(const w of wraps){ w.innerHTML = html; wireEditableHeaders(w); }
+}
+
+function wireEditableHeaders(root){
+  root.querySelectorAll('.editable-hdr > [contenteditable]').forEach(span=>{
+    const cell = span.parentElement;
+    const kind = cell.dataset.kind;   // 'day' or 'shift'
+    const i    = +cell.dataset.i;
+    const commit = ()=>{
+      const raw = span.textContent;
+      if(kind === 'day')   renameDay(i, raw);
+      else                 renameShift(i, raw);
+    };
+    span.addEventListener('blur', commit);
+    span.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); span.blur(); }
+      if(e.key === 'Escape'){
+        e.preventDefault();
+        span.textContent = kind==='day' ? dayLabel(i) : shiftLabel(i);
+        span.blur();
+      }
+    });
+    // stop click-through so clicking the header doesn't also toggle a request cell
+    span.addEventListener('click', e=>e.stopPropagation());
+  });
 }
 
 function togglePref(n, d, s){
@@ -2590,8 +2656,7 @@ function renderConstraintsEditor(){
   wkBox.innerHTML = '';
   wkBox.appendChild(makeNumberInput(nsp.maxPerWeek, 0, nsp.days*nsp.shiftsPerDay, v=>{
     nsp.maxPerWeek = v;
-    const slider = document.getElementById('rMax');
-    if(+slider.value !== v){ slider.value = v; document.getElementById('oMax').textContent = v }
+    currentMaxPerWeek = v;  // remember across problem-size rebuilds
     if(running) stopRun();
     resetTelemetry(); applySchedule(new Uint8Array(nsp.total));
   }));
