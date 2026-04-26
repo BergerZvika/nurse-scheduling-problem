@@ -180,6 +180,32 @@
   .algo-card.active .card-actions button{background:rgba(7,17,26,.25);color:#07111a;border-color:rgba(7,17,26,.18)}
   .algo-card.active .card-actions button:hover{background:rgba(7,17,26,.45);color:#07111a}
 
+  /* help / about modal */
+  #helpModal .modal{width:min(900px, 96vw);max-height:88vh}
+  #helpModal .modal-body{padding:20px 24px;font-size:13.5px;line-height:1.6;color:var(--ink)}
+  #helpModal .help-section{margin-bottom:18px}
+  #helpModal .help-section:last-child{margin-bottom:0}
+  #helpModal h3{margin:0 0 10px;font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  #helpModal p{margin:0 0 10px;color:var(--ink)}
+  #helpModal ul,#helpModal ol{margin:6px 0 0;padding-left:20px;color:var(--ink)}
+  #helpModal li{margin-bottom:6px}
+  #helpModal li b{color:var(--cyan);font-weight:600}
+  #helpModal kbd{display:inline-block;padding:1px 7px;border-radius:5px;background:rgba(255,255,255,.06);
+    border:1px solid var(--line);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--ink)}
+  #helpModal .help-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  #helpModal .help-grid .card{padding:12px 14px;border:1px solid var(--line);border-radius:10px;
+    background:rgba(255,255,255,.03)}
+  #helpModal .help-grid .card h4{margin:0 0 6px;font-size:12px;color:var(--ink);font-weight:600}
+  #helpModal .help-grid .card p{margin:0;font-size:12.5px;color:var(--ink-dim);line-height:1.5}
+  @media (max-width:760px){#helpModal .help-grid{grid-template-columns:1fr}}
+
+  /* header help button */
+  .header-help-btn{all:unset;cursor:pointer;width:30px;height:30px;display:grid;place-items:center;
+    border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink);
+    font-weight:700;font-size:13px;font-family:ui-serif,Georgia,serif;transition:.15s;margin-right:4px}
+  .header-help-btn:hover{background:rgba(92,246,255,.15);border-color:rgba(92,246,255,.45);color:var(--cyan);
+    transform:translateY(-1px)}
+
   /* info / code modal */
   #algoInfoModal .modal{width:min(1000px, 96vw);max-height:86vh}
   #algoInfoModal .modal-body{padding:18px 22px}
@@ -417,6 +443,7 @@
       </div>
     </div>
     <div class="chip-row" style="display:flex;gap:8px;align-items:center">
+      <button class="header-help-btn" id="btnHelp" title="About this lab — what it is and how to use it">?</button>
       <div class="chip idle" id="chipStatus"><span class="dot"></span><b id="statusText">Idle</b></div>
       <div class="chip"><span>Algorithm</span><b id="chipAlgo">—</b></div>
       <div class="chip"><span>Elapsed</span><b id="chipTime">0.00s</b></div>
@@ -623,6 +650,105 @@
       <div class="right">
         <button class="ghost" id="algoInfoCopy">Copy code</button>
         <button class="primary" id="algoInfoCloseBtn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Help / About this Lab modal -->
+<div class="modal-back" id="helpModal">
+  <div class="modal glass">
+    <div class="modal-head">
+      <div>
+        <h2>Welcome to the Problem Lab</h2>
+        <p>What the Nurse Scheduling Problem is and how to use this lab.</p>
+      </div>
+      <button class="modal-close" id="helpClose" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="help-section">
+        <h3>The problem</h3>
+        <p>The <b>Nurse Scheduling Problem (NSP)</b> assigns nurses to shifts across a week so that every shift is covered without overworking anyone or ignoring their requests. It is a classic <b>NP-hard</b> combinatorial optimization problem — there are exponentially many possible schedules and no shortcut to the best one.</p>
+        <p>A schedule has two kinds of rules:</p>
+        <ul>
+          <li><b>Hard constraints</b> — must be satisfied: per-shift staffing (min/max nurses on duty), no consecutive shifts for the same nurse, and a weekly shift cap. Violations carry a heavy penalty.</li>
+          <li><b>Soft constraints</b> — preferences: each nurse can mark shifts they would rather not work. Breaking a preference adds a small penalty.</li>
+        </ul>
+        <p>The total cost is <code>HARD_PENALTY × hard_violations + preference_breaks</code>. The lab visualizes seven different algorithms searching for low-cost schedules.</p>
+      </div>
+
+      <div class="help-section">
+        <h3>How to use the lab</h3>
+        <ol>
+          <li><b>Set the problem size</b> in the left sidebar: number of nurses, days, and shifts per day.</li>
+          <li><b>Fill the Nurse Requests table</b> in the middle of the page (see the next section for details). Click cells to mark shifts a nurse wants off, or use <b>Randomize</b> / <b>Clear</b> in the sidebar.</li>
+          <li><b>(Optional) Tune hard constraints</b> via the <b>Hard Constraints</b> button — adjust the weekly cap, the penalty weight, and per-shift staffing min/max, or pick a preset (Quiet / Balanced / Busy / Strict).</li>
+          <li><b>Pick an algorithm</b> from the bar at the bottom and click it to launch a live 3D run. A popup window opens showing the schedule cube updating in real time.</li>
+          <li><b>Watch and compare</b>: telemetry shows current cost, best cost, hard violations, preference breaks, and the cost trajectory. Use <b>Stop</b> in the popup or <kbd>Esc</kbd> to close.</li>
+          <li>Click the small <b>ℹ</b> on any algorithm card to read its description and view the actual Python source from <code>OptimizationGui/</code>.</li>
+        </ol>
+      </div>
+
+      <div class="help-section">
+        <h3>Filling the Nurse Requests table</h3>
+        <p>The <b>Nurse Requests</b> table is where you tell the algorithm which shifts each nurse would prefer <i>not</i> to work. You edit one nurse at a time:</p>
+        <ol>
+          <li><b>Pick a nurse</b> — the row of pill-shaped tabs above the table lists every nurse. Click one to switch which nurse you are editing; the active tab is highlighted in cyan/violet. The small number on each tab is how many off-requests that nurse already has.</li>
+          <li><b>(Optional) Rename the nurse</b> — type a name in the <b>Rename</b> field below the tabs (e.g. "Alice", "Night-only"). The new name immediately appears on the tab and in the schedule view.</li>
+          <li><b>Toggle off-requests</b> — the table rows are days and the columns are shifts. Click any cell to flip its state:
+            <ul>
+              <li><b>Ok</b> (empty / dim) — the nurse is available for this shift.</li>
+              <li><b>Off</b> (magenta tint) — the nurse has requested this shift off. Algorithms try to avoid scheduling them here; if forced to, it counts as a <b>preference break</b>.</li>
+              <li><b>Work</b> (green tint, with a green dot) — appears <i>after</i> a run finishes; this is a shift the algorithm assigned to this nurse.</li>
+              <li><b>Off + Work</b> (red tint) — appears after a run; the algorithm had to assign a shift the nurse asked off, so this cell is a preference break.</li>
+            </ul>
+          </li>
+          <li><b>Rename days or shifts</b> — the column headers (shift names like <i>Morning / Evening / Night</i>) and row headers (day names like <i>Mon / Tue / …</i>) are editable. Click the header text and type to rename. Useful for ward-specific shift labels.</li>
+          <li><b>Repeat for every nurse</b> — switch tabs and mark each nurse's preferences. You don't have to fill every nurse; nurses left blank simply have no off-requests.</li>
+          <li><b>Bulk fill</b> — use <b>Randomize</b> in the sidebar to scatter random off-requests across all nurses (useful for quickly testing an algorithm), or <b>Clear</b> to wipe all preferences and start clean.</li>
+        </ol>
+        <p style="color:var(--ink-dim);font-size:12.5px;margin-top:8px">After a run, a small chip below the table summarises that nurse's outcome: how many shifts they were scheduled for and how many of their preferences were broken.</p>
+      </div>
+
+      <div class="help-section">
+        <h3>The 3D visualization</h3>
+        <div class="help-grid">
+          <div class="card">
+            <h4>Axes</h4>
+            <p><b>X</b> — days · <b>Y</b> — shifts in the day · <b>Z</b> — individual nurses. A glowing cyan cube is an assigned shift; a magenta tint means it violates a nurse's off-request.</p>
+          </div>
+          <div class="card">
+            <h4>Camera</h4>
+            <p>Drag to orbit · scroll to zoom · use <b>Top</b> / <b>Iso</b> / <b>Front</b> for preset views. Toggle <b>Auto-rotate</b> for an idle cinematic spin.</p>
+          </div>
+          <div class="card">
+            <h4>Telemetry</h4>
+            <p>The right panel of the popup tracks current cost, best cost so far, iteration count, hard violations, preference breaks, and a live cost trajectory chart.</p>
+          </div>
+          <div class="card">
+            <h4>Speed</h4>
+            <p>The <b>Run speed</b> slider in the popup controls how fast iterations are visualized — it does not change the algorithm itself, only the playback rate.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-section">
+        <h3>Keyboard shortcuts</h3>
+        <ul>
+          <li><kbd>Space</kbd> — run / pause the selected algorithm</li>
+          <li><kbd>R</kbd> — reset the problem instance</li>
+          <li><kbd>A</kbd> — toggle camera auto-rotate</li>
+          <li><kbd>E</kbd> — open the Hard Constraints editor</li>
+          <li><kbd>Esc</kbd> — close any open popup or modal</li>
+        </ul>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="left">
+        <span style="color:var(--ink-dim);font-size:11px">Click the <b>?</b> in the top-right any time to reopen this guide.</span>
+      </div>
+      <div class="right">
+        <button class="primary" id="helpCloseBtn">Got it</button>
       </div>
     </div>
   </div>
@@ -2318,9 +2444,19 @@ function flyCamera(target, look){
   requestAnimationFrame(step);
 }
 
+// Help / About modal
+const helpModal = document.getElementById('helpModal');
+function openHelp(){ helpModal.classList.add('open') }
+function closeHelp(){ helpModal.classList.remove('open') }
+document.getElementById('btnHelp').addEventListener('click', openHelp);
+document.getElementById('helpClose').addEventListener('click', closeHelp);
+document.getElementById('helpCloseBtn').addEventListener('click', closeHelp);
+helpModal.addEventListener('click', (e)=>{ if(e.target === helpModal) closeHelp() });
+
 // Keyboard
 addEventListener('keydown', (e)=>{
   if(e.target.tagName === 'INPUT') return;
+  if(helpModal.classList.contains('open') && e.code === 'Escape'){ closeHelp(); return }
   if(algoInfoModal.classList.contains('open') && e.code === 'Escape'){ closeAlgoInfo(); return }
   if(modalBack.classList.contains('open') && e.code === 'Escape'){ closeEditor(); return }
   if(vizOpen && e.code === 'Escape'){ closeViz(); return }
@@ -2855,6 +2991,7 @@ addEventListener('resize', ()=>{
 // Bootstrap
 buildNSP();
 animate();
+openHelp();
 </script>
 </body>
 </html>
